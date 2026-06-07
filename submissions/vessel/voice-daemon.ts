@@ -43,17 +43,12 @@ const FOLLOW_USER_ID = process.env.FOLLOW_USER_ID || "691531480689541170";
 let connection: ReturnType<typeof joinVoiceChannel> | null = null;
 let player = createAudioPlayer();
 
-// Persistent PCM stream — any process can pipe raw audio in via POST /feed
-// ffmpeg → pipe:1 → POST /feed → audioFeed → Discord voice (no ad-hoc per-clip setup)
-const audioFeed = new PassThrough();
-let feedActive = false;
-
-function startFeed() {
-  if (feedActive) return;
-  feedActive = true;
-  const resource = createAudioResource(audioFeed, { inputType: StreamType.Raw });
+function makeFeedStream() {
+  const feed = new PassThrough();
+  feed.on("error", (e) => console.error("[vessel-voice] feed error:", e.message));
+  const resource = createAudioResource(feed, { inputType: StreamType.Raw });
   player.play(resource);
-  player.once(AudioPlayerStatus.Idle, () => { feedActive = false; });
+  return feed;
 }
 
 // Track who is in which voice channel: userId → { channelId, channelName, displayName }
@@ -212,10 +207,10 @@ const server = createServer(async (req, res) => {
   // Usage: ffmpeg -i input.mp3 -f s16le -ar 48000 -ac 2 - | curl -X POST --data-binary @- http://127.0.0.1:14808/feed
   if (req.method === "POST" && url.pathname === "/feed") {
     if (!connection) { res.writeHead(400); res.end(JSON.stringify({ error: "not in voice channel" })); return; }
-    startFeed();
-    req.pipe(audioFeed, { end: false });
-    req.on("end", () => res.end(JSON.stringify({ ok: true })));
     res.writeHead(200);
+    const feed = makeFeedStream();
+    req.pipe(feed);
+    req.on("end", () => res.end(JSON.stringify({ ok: true })));
     return;
   }
 
