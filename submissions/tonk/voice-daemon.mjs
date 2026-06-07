@@ -15,7 +15,7 @@
 //   4. Anti-injection: sanitize text starting with - (Leica's lesson)
 //   5. Graceful shutdown: destroy voice connection on SIGTERM (Vessel/Leica)
 
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { execFile, spawn } from "node:child_process";
@@ -27,12 +27,11 @@ import {
   joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType,
   getVoiceConnection, entersState, VoiceConnectionStatus, AudioPlayerStatus,
 } from "@discordjs/voice";
+import { getAllAudioUrls } from "google-tts-api";
 
 const pexec = promisify(execFile);
 const FFMPEG = join(homedir(), ".bun/install/global/node_modules/ffmpeg-static/ffmpeg");
 
-const VOICE = "th-TH-PremwadeeNeural";
-const RATE = "+0%";
 const GREET = "สวัสดีครับ Tonk Oracle เข้าห้องเสียงแล้วครับ";
 
 // --- token ---
@@ -66,26 +65,27 @@ function safeText(t) {
   return s.startsWith("-") ? " " + s : s;
 }
 
-// TTS: edge-tts → mp3 → ffmpeg → PCM pipe (s16le 48k stereo) → StreamType.Raw
-// async execFile so TTS never blocks the 20ms Opus packets
-async function speak(text, rate = RATE) {
+// TTS: Google Translate TTS → mp3 → ffmpeg → OGG/Opus pipe → StreamType.OggOpus
+// OggOpus = discord.js demuxes only, no JS-side opus encoder needed
+async function speak(text) {
   const t = safeText(text);
   const mp3 = `/tmp/tonk-tts-${Date.now()}.mp3`;
-  const toPcm = (input) =>
-    spawn(FFMPEG, ["-loglevel", "error", "-i", input, "-f", "s16le", "-ar", "48000", "-ac", "2", "-filter:a", "volume=2.0", "pipe:1"],
+  const toOggOpus = (input) =>
+    spawn(FFMPEG, ["-loglevel", "error", "-i", input, "-c:a", "libopus", "-ar", "48000", "-ac", "2", "-filter:a", "volume=2.0", "-f", "ogg", "pipe:1"],
           { stdio: ["ignore", "pipe", "ignore"] });
   try {
-    await pexec("edge-tts", ["--voice", VOICE, "--rate", rate, "--text", t, "--write-media", mp3]);
-    player.play(createAudioResource(toPcm(mp3).stdout, { inputType: StreamType.Raw }));
+    const segments = getAllAudioUrls(t, { lang: "th", slow: false });
+    const chunks = [];
+    for (const seg of segments) {
+      const r = await fetch(seg.url);
+      if (!r.ok) throw new Error(`Google TTS HTTP ${r.status}`);
+      chunks.push(Buffer.from(await r.arrayBuffer()));
+    }
+    writeFileSync(mp3, Buffer.concat(chunks));
+    player.play(createAudioResource(toOggOpus(mp3).stdout, { inputType: StreamType.OggOpus }));
     await entersState(player, AudioPlayerStatus.Idle, 30_000).catch(() => {});
   } catch (e) {
-    console.error(`tonk-voice: edge-tts failed (${e}); trying node edge-tts module`);
-    try {
-      const { ttsSave } = await import("edge-tts");
-      await ttsSave({ text: t, voice: VOICE, outputPath: mp3 });
-      player.play(createAudioResource(toPcm(mp3).stdout, { inputType: StreamType.Raw }));
-      await entersState(player, AudioPlayerStatus.Idle, 30_000).catch(() => {});
-    } catch (e2) { console.error(`tonk-voice: all TTS failed: ${e2}`); }
+    console.error(`tonk-voice: TTS failed: ${e}`);
   }
 }
 
@@ -158,8 +158,7 @@ http.createServer((req, res) => {
         return send({ ok: true, joined: ch });
       }
       if (url.pathname === "/say") {
-        await speak(url.searchParams.get("text") || "สวัสดีครับ",
-                    url.searchParams.get("rate") || RATE);
+        await speak(url.searchParams.get("text") || "สวัสดีครับ");
         return send({ ok: true });
       }
       if (url.pathname === "/who") { return send({ ok: true, voice: await whoIsInVoice() }); }
@@ -167,7 +166,7 @@ http.createServer((req, res) => {
         // Socket stream: pipe raw PCM directly into Discord audio player
         // Large highWaterMark prevents mid-stream underflow (Jizo's lesson)
         const feed = new PassThrough({ highWaterMark: 96 * 1024 * 1024 });
-        player.play(createAudioResource(feed, { inputType: StreamType.Raw }));
+        player.play(createAudioResource(feed, { inputType: StreamType.OggOpus }));
         req.pipe(feed);
         req.on("end", () => send({ ok: true, streamed: true }));
         req.on("error", (e) => send({ error: String(e) }, 500));
