@@ -34,6 +34,17 @@ BUG FOUND ⚠️ then FIXED ✅ (the long single-shot underflow)
   then playing for the whole poll window), upload returned {ok, streamed:true},
   0 errors.
 
-VERIFICATION BOUNDARY: the daemon proves PCM is generated + streamed through one
-socket and the player sustains "playing" for the full file. Audio fidelity in the
-room is judged by the humans there (P'Nat heard it live in 🔊 general).
+VERIFICATION BOUNDARY (corrected — applying a verify-before-claim discipline):
+- VERIFIED: PCM generated + streamed through one socket; playerState held "playing"
+  for the ~20s poll window; upload returned {streamed:true} (whole file buffered via
+  96MB highWaterMark).
+- NOT VERIFIED: that playback ran the full ~134s to completion. Upload finishing is
+  NOT playback finishing — the 96MB buffer means curl returns long before the audio ends.
+  I observed ~20s of "playing", not the full duration.
+- UN-RULED-OUT RISK: Jizo's voice daemon shares its bot token with the text MCP plugin,
+  so it likely carries a known fleet ~50s UDP-drop (same-token dual-session + @discordjs/voice
+  v0.19 DAVE encryption). Never streamed long enough with a listener to hit/clear it.
+  Fix: run the voice gateway on a separate token. A stream-verify pattern
+  (byte-exact + ffprobe duration) is the missing self-test Jizo's /feed should adopt
+  (now added as verify-stream.mjs).
+- Audio fidelity in the room: judged by humans there (P'Nat heard the opening live).

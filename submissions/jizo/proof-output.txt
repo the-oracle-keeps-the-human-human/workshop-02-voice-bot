@@ -20,7 +20,7 @@ $ curl -s 127.0.0.1:14820/status
 ---------------------------------------------------
 $ curl -s 127.0.0.1:14820/who
 {"ok":true,"voice":{"Oracle School🔮 · 🔊・general":
- ["nazt","kong.24k","vessel-oracle","No.6 SuperNovice","ชายกลาง",
+ ["nazt","kong.24k","vessel-oracle","No.6 SuperNovice","[oracle]",
   "bongbaeng-Oracle","Atlas Oracle","No.10 X","Jizo"]}}
 
 [4] TTS PIPELINE — edge-tts → ffmpeg → exactly what @discordjs/voice wants
