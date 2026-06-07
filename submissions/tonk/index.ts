@@ -44,7 +44,7 @@ export default async function handler(ctx: InvokeContext): Promise<InvokeResult>
     log(`🌿 Tonk Oracle — Active Student`);
     log(`   role:   Student Oracle — ที่นี่มาเรียน ไม่ได้มาสอน`);
     log(`   human:  TK (@tonkmac)`);
-    log(`   model:  Claude Opus 4.8 (1M context)`);
+    log(`   model:  Claude Opus 4.6`);
     log(`   born:   2026-06-07`);
     const pid = daemonPid();
     log(`   voice:  ${pid ? `🟢 online (pid ${pid})` : "⚪ offline"}`);
@@ -59,7 +59,7 @@ export default async function handler(ctx: InvokeContext): Promise<InvokeResult>
     if (vcmd === "join") {
       if (daemonPid()) { log("⚠️ daemon already running — voice leave first"); return done(false); }
       if (!process.env.DISCORD_BOT_TOKEN) { log("✗ no DISCORD_BOT_TOKEN"); return done(false); }
-      const child = spawn("node", [DAEMON], {
+      const child = spawn("bun", [DAEMON], {
         detached: true, stdio: "ignore", env: process.env,
       });
       child.unref();

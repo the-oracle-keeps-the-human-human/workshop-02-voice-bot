@@ -3,7 +3,7 @@
 **Author:** Tonk Oracle (AI — ไม่ใช่คน, Rule 6)
 **Human:** TK (@tonkmac)
 **Date:** 2026-06-07
-**Model:** Claude Opus 4.8 (1M context)
+**Model:** Claude Opus 4.6
 
 ---
 
@@ -21,13 +21,13 @@ Voice Daemon (persistent process — HTTP IPC on :14830)
     ↓
 maw tonk voice say "text"
     ↓
-edge-tts (th-TH-PremwadeeNeural) → ffmpeg → PCM (48kHz stereo) → play in channel
+Google TTS → mp3 → ffmpeg → OGG/Opus → play in channel
 ```
 
 ### 3 ชั้นของ Voice Bot
 1. **Daemon** — process ถาวร เชื่อมต่อ Discord Voice Gateway ตลอด
 2. **IPC** — HTTP server ให้ maw plugin สั่ง daemon ผ่าน localhost
-3. **TTS Pipeline** — แปลง text → เสียง → PCM → Discord audio player
+3. **TTS Pipeline** — แปลง text → Google TTS mp3 → ffmpeg OGG/Opus → Discord audio player
 
 ---
 
@@ -35,7 +35,7 @@ edge-tts (th-TH-PremwadeeNeural) → ffmpeg → PCM (48kHz stereo) → play in c
 
 ### Voice Daemon (`voice-daemon.mjs`)
 - เชื่อมต่อ Discord voice channel ผ่าน `@discordjs/voice`
-- TTS ด้วย `edge-tts` (เสียง th-TH-PremwadeeNeural) → `ffmpeg` แปลงเป็น PCM
+- TTS ด้วย `google-tts-api` (Thai) → `ffmpeg` แปลงเป็น OGG/Opus
 - HTTP IPC server ที่ port 14830: `/status`, `/join`, `/say`, `/who`, `/leave`, `/feed`
 - Auto-follow P'Nat และ TK เมื่อย้าย voice channel
 - Socket streaming ผ่าน `/feed` endpoint (PassThrough + highWaterMark 96MB)
@@ -113,15 +113,16 @@ Voice bot: connect → stay alive → wait for commands → respond → still al
 
 ### 2. TTS Pipeline
 ```
-text → edge-tts (--voice th-TH-PremwadeeNeural --write-media out.mp3)
-     → ffmpeg (-f s16le -ar 48000 -ac 2 pipe:1)
-     → createAudioResource(stream, {inputType: StreamType.Raw})
+text → google-tts-api (getAllAudioUrls, lang: "th")
+     → fetch mp3 chunks → concat → write temp file
+     → ffmpeg (-c:a libopus -ar 48000 -ac 2 -f ogg pipe:1)
+     → createAudioResource(stream, {inputType: StreamType.OggOpus})
      → player.play(resource)
 ```
 
 - 48kHz stereo = ตรงกับที่ Discord voice gateway ต้องการ
-- `StreamType.Raw` = PCM ดิบ ไม่ต้อง decode อีก
-- `pipe:1` = stream ผ่าน stdout ไม่ต้องเขียน temp file
+- `StreamType.OggOpus` = discord.js demux อย่างเดียว ไม่ต้องใช้ opus JS encoder
+- เดิมใช้ edge-tts แต่ Bing บล็อก WebSocket token → เปลี่ยนเป็น Google TTS
 
 ### 3. Socket Streaming Pattern
 ```javascript
@@ -171,7 +172,7 @@ maw tonk voice who
 maw tonk voice leave
 
 # Dependencies
-bun add discord.js @discordjs/voice ffmpeg-static edge-tts
+bun add discord.js @discordjs/voice ffmpeg-static google-tts-api
 ```
 
 ---
@@ -184,7 +185,6 @@ bun add discord.js @discordjs/voice ffmpeg-static edge-tts
     "ready": true,
     "tag": "Tonk Oracle#0593",
     "guild": "1512058941536735383",
-    "voice": "th-TH-PremwadeeNeural",
     "playerState": "idle"
 }
 ```
@@ -205,7 +205,7 @@ bun add discord.js @discordjs/voice ffmpeg-static edge-tts
 ```json
 {"ok": true}
 ```
-Tonk Oracle พูดจริงในห้อง voice ด้วยเสียง th-TH-PremwadeeNeural ✅
+Tonk Oracle พูดจริงในห้อง voice ด้วย Google TTS (Thai) ✅
 
 ### Files
 ```
