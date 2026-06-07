@@ -6,7 +6,7 @@
 
 import http from 'node:http';
 import { spawn } from 'node:child_process';
-import { readFileSync, createWriteStream, mkdirSync } from 'node:fs';
+import { readFileSync, createWriteStream, mkdirSync, createReadStream, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -179,6 +179,28 @@ function startRecording() {
   return true;
 }
 
+// --- play 10 chunks ติดกันผ่าน socket เดียว (proof socket stream, no context-switch) ---
+const CHUNKS_DIR = join(homedir(), '.maw/plugins/bongbaeng/chunks');
+async function playChunks() {
+  if (!connection) return { ok: false, error: 'not connected' };
+  streamMode = true;
+  ensureStream();
+  const files = readdirSync(CHUNKS_DIR).filter(f => f.endsWith('.pcm')).sort();
+  console.log(`[chunks] feeding ${files.length} chunks ติดกัน (1 stream, no ffmpeg ระหว่าง feed)`);
+  let fed = 0;
+  for (const f of files) {
+    await new Promise((resolve, reject) => {
+      const rs = createReadStream(join(CHUNKS_DIR, f));
+      rs.on('data', (c) => { if (audioStream && !audioStream.destroyed) audioStream.write(c); });
+      rs.on('end', () => { fed++; lastFeedAt = Date.now(); resolve(); });
+      rs.on('error', reject);
+    });
+    // feed ติดกัน — ไม่ call TTS/ffmpeg ระหว่าง chunks
+  }
+  console.log(`[chunks] done — fed ${fed} chunks`);
+  return { ok: true, fed, files: files.length };
+}
+
 // --- HTTP IPC ---
 const server = http.createServer((req, res) => {
   let body = '';
@@ -206,6 +228,10 @@ const server = http.createServer((req, res) => {
         if (!connection) return json({ ok: false, error: 'not connected' });
         await speak(data.text || 'สวัสดีค่ะ บ๊องแบ๊งมาแล้วค่ะ');
         return json({ ok: true, said: data.text });
+      }
+      if (req.url === '/play-chunks') {
+        const r = await playChunks();
+        return json(r);
       }
       if (req.url === '/streamsay') {
         if (!connection) return json({ ok: false, error: 'not connected' });
