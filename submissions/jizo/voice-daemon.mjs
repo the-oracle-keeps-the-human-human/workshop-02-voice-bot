@@ -11,6 +11,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import { PassThrough } from "node:stream";
 import http from "node:http";
 import { Client, GatewayIntentBits } from "discord.js";
 import {
@@ -171,6 +172,21 @@ http.createServer((req, res) => {
         return send({ ok: true });
       }
       if (url.pathname === "/who") { return send({ ok: true, voice: await whoIsInVoice() }); }
+      if (url.pathname === "/feed") {
+        // Persistent socket stream — pipe raw PCM (s16le 48k stereo) from ONE connection
+        // straight into Discord via a SINGLE AudioResource. No per-file resource, no spawn
+        // mid-stream → no context-switching. This is P'Nat's voice-socket-stream proof:
+        // generate all chunks up front, then feed every byte through this one socket.
+        // Large highWaterMark so the whole PCM file buffers at once: curl dumps it in
+        // instantly (no real-time backpressure throttle) and the player drains a full
+        // buffer → no mid-stream underflow that would wedge it at Idle.
+        const feed = new PassThrough({ highWaterMark: 96 * 1024 * 1024 });
+        player.play(createAudioResource(feed, { inputType: StreamType.Raw }));
+        req.pipe(feed);
+        req.on("end", () => send({ ok: true, streamed: true }));
+        req.on("error", (e) => send({ error: String(e) }, 500));
+        return;
+      }
       if (url.pathname === "/follow") { const ok = await followIfPresent(url.searchParams.get("greet") !== "0"); return send({ ok, followed: ok }); }
       if (url.pathname === "/leave") { getVoiceConnection(currentGuildId)?.destroy(); currentGuildId = null; return send({ ok: true }); }
       send({ error: "not found" }, 404);
