@@ -6,7 +6,7 @@
 
 import http from 'node:http';
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, createWriteStream, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -14,7 +14,7 @@ import { Client, GatewayIntentBits } from 'discord.js';
 import {
   joinVoiceChannel, createAudioPlayer, createAudioResource,
   entersState, VoiceConnectionStatus, AudioPlayerStatus, StreamType,
-  NoSubscriberBehavior,
+  NoSubscriberBehavior, EndBehaviorType,
 } from '@discordjs/voice';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 
@@ -152,6 +152,33 @@ async function speak(text) {
   await entersState(player, AudioPlayerStatus.Idle, 30_000).catch(() => {});
 }
 
+// --- record raw audio (recipe A: เขียน Opus packets ตรงๆ ไม่ decode = ไม่ crash) ---
+let recording = false;
+let recCount = 0;
+const REC_DIR = join(homedir(), '.maw/plugins/bongbaeng/recordings');
+
+function startRecording() {
+  if (!connection) return false;
+  recording = true;
+  mkdirSync(REC_DIR, { recursive: true });
+  const receiver = connection.receiver;
+  receiver.speaking.on('start', (userId) => {
+    if (!recording) return;
+    try {
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const file = join(REC_DIR, `rec_${userId}_${ts}.opus`);
+      const opus = receiver.subscribe(userId, { end: { behavior: EndBehaviorType.AfterSilence, duration: 1500 } });
+      const out = createWriteStream(file);
+      // ⚠️ raw opus ตรงๆ — ไม่ decode (กัน prism crash ที่ ChaiKlang เจอ 3 รอบ)
+      opus.pipe(out);
+      opus.on('error', (e) => { console.log('[rec] opus err:', e.message); out.end(); }); // per-stream guard
+      opus.on('end', () => { out.end(); recCount++; console.log(`[rec] saved ${file} (#${recCount})`); });
+    } catch (e) { console.log('[rec] capture err:', e.message); } // กัน daemon ล้ม
+  });
+  console.log('[bongbaeng-voice] recording armed → ' + REC_DIR);
+  return true;
+}
+
 // --- HTTP IPC ---
 const server = http.createServer((req, res) => {
   let body = '';
@@ -193,6 +220,17 @@ const server = http.createServer((req, res) => {
           streamAlive: !!(audioStream && !audioStream.destroyed),
           lastFeedAgoMs: lastFeedAt ? Date.now() - lastFeedAt : null,
         });
+      }
+      if (req.url === '/record-start') {
+        const ok = startRecording();
+        return json({ ok, recording, dir: REC_DIR });
+      }
+      if (req.url === '/record-stop') {
+        recording = false;
+        return json({ ok: true, recording: false, saved: recCount });
+      }
+      if (req.url === '/record-status') {
+        return json({ ok: true, recording, saved: recCount, dir: REC_DIR });
       }
       if (req.url === '/who') {
         const guild = await client.guilds.fetch('1512058941536735383');
