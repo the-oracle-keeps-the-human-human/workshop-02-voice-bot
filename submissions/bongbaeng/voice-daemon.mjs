@@ -135,6 +135,17 @@ const server = http.createServer((req, res) => {
         await speak(data.text || 'สวัสดีค่ะ บ๊องแบ๊งมาแล้วค่ะ');
         return json({ ok: true, said: data.text });
       }
+      if (req.url === '/who') {
+        const guild = await client.guilds.fetch('1512058941536735383');
+        const channels = await guild.channels.fetch();
+        const voice = {};
+        for (const [, ch] of channels) {
+          if (ch && ch.type === 2 && ch.members.size > 0) {
+            voice[ch.name] = [...ch.members.values()].map(m => m.displayName || m.user.username);
+          }
+        }
+        return json({ ok: true, voice });
+      }
       if (req.url === '/follow') {
         const ok = await followNazt(data.greet !== false);
         return json({ ok, followed: ok });

@@ -52,6 +52,19 @@ async function cmdVoice(args: string[]) {
       console.log("👋 left voice channel");
       break;
     }
+    case "who": {
+      const res = await ipc("/who");
+      if (!res.ok) { console.log(`✗ ${res.error}`); break; }
+      const voice = res.voice || {};
+      const rooms = Object.keys(voice);
+      if (!rooms.length) { console.log("🔇 ไม่มีใครอยู่ใน voice channel"); break; }
+      console.log("🎙️ Voice channels (real-time):");
+      for (const room of rooms) {
+        console.log(`  ${room} (${voice[room].length})`);
+        for (const name of voice[room]) console.log(`    • ${name}`);
+      }
+      break;
+    }
     case "status":
     default: {
       try {
