@@ -1,0 +1,17 @@
+{
+  "name": "jizo-voice",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Jizo voice daemon — joins Discord voice, TTS via macOS say, auto-follows P'Nat",
+  "scripts": {
+    "daemon": "node voice-daemon.mjs"
+  },
+  "dependencies": {
+    "discord.js": "^14",
+    "@discordjs/voice": "^0.19.0",
+    "opusscript": "^0.1.1",
+    "libsodium-wrappers": "^0.7.15",
+    "ffmpeg-static": "^5.2.0"
+  }
+}
