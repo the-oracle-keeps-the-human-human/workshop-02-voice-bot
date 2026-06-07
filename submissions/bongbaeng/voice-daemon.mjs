@@ -34,7 +34,34 @@ let connection = null;
 const player = createAudioPlayer();
 let ready = false;
 
+const NAZT = '691531480689541170'; // พี่นัท
+
 client.once('ready', () => { ready = true; console.log(`[bongbaeng-voice] logged in as ${client.user.tag}`); });
+
+// --- auto-follow + auto-greet พี่นัท ---
+client.on('voiceStateUpdate', async (oldS, newS) => {
+  if (newS.member?.id !== NAZT) return;
+  const ch = newS.channelId;
+  try {
+    if (ch && ch !== oldS.channelId) {
+      // nazt joined or moved → follow + greet
+      if (connection) connection.destroy();
+      connection = joinVoiceChannel({
+        channelId: ch, guildId: newS.guild.id,
+        adapterCreator: newS.guild.voiceAdapterCreator, selfDeaf: false,
+      });
+      await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
+      connection.subscribe(player);
+      console.log(`[bongbaeng-voice] following nazt → ${ch}`);
+      await speak('สวัสดีค่ะ บ๊องแบ๊งมาแล้วค่ะ');
+    } else if (!ch && connection) {
+      // nazt left → leave
+      connection.destroy(); connection = null;
+      console.log('[bongbaeng-voice] nazt left → leaving');
+    }
+  } catch (e) { console.log('[bongbaeng-voice] follow error:', e.message); }
+});
+
 client.login(readToken());
 
 // --- TTS: text → macOS say (AIFF) → ffmpeg (PCM s16le 48k stereo) → AudioResource ---
