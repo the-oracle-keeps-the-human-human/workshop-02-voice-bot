@@ -1,6 +1,82 @@
-import { writeFileSync, mkdirSync } from "fs";
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from "fs";
+import { Client, GatewayIntentBits } from "discord.js";
 
-export default function (apiOrCtx: any) {
+const envDir = "/root/.claude/channels/discord-no10";
+
+function getBotToken(): string | undefined {
+  if (process.env.DISCORD_BOT_TOKEN) return process.env.DISCORD_BOT_TOKEN;
+  const envPath = `${envDir}/.env`;
+  if (existsSync(envPath)) {
+    try {
+      const content = readFileSync(envPath, "utf8");
+      const m = content.match(/DISCORD_BOT_TOKEN\s*=\s*(.+)/);
+      if (m) return m[1].trim();
+    } catch {}
+  }
+  return undefined;
+}
+
+async function listActiveVoice(log: (s: string) => void): Promise<void> {
+  const token = getBotToken();
+  if (!token) {
+    log("✗ Error: DISCORD_BOT_TOKEN not found.");
+    return;
+  }
+
+  const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
+  return new Promise<void>((resolve) => {
+    let completed = false;
+    const finish = () => {
+      if (!completed) {
+        completed = true;
+        client.destroy();
+        resolve();
+      }
+    };
+
+    // Set a safety timeout
+    const timeout = setTimeout(() => {
+      log("✗ Timeout: Discord query took too long.");
+      finish();
+    }, 10000);
+
+    client.once("ready", async () => {
+      try {
+        log(`🌐 [Discord Voice Status] — Querying guild states...`);
+        let found = false;
+        for (const guild of client.guilds.cache.values()) {
+          const voiceStates = guild.voiceStates.cache;
+          if (voiceStates.size > 0) {
+            found = true;
+            log(`\n🏰 Guild: ${guild.name} (${guild.id})`);
+            for (const [memberId, state] of voiceStates) {
+              const member = state.member;
+              const userTag = member?.user.tag || memberId;
+              const channelName = state.channel?.name || state.channelId || "Unknown";
+              log(`  🔊 ${userTag} is in [${channelName}] (${state.channelId})`);
+            }
+          }
+        }
+        if (!found) {
+          log(`\n⚪ No active voice channels found in any guild.`);
+        }
+      } catch (e: any) {
+        log(`Error querying voice states: ${e.message}`);
+      } finally {
+        clearTimeout(timeout);
+        finish();
+      }
+    });
+
+    client.login(token).catch(e => {
+      log(`Error logging in to Discord: ${e.message}`);
+      clearTimeout(timeout);
+      finish();
+    });
+  });
+}
+
+export default async function (apiOrCtx: any) {
   const queueDir = "/tmp/no10-speak-queue";
 
   // 1. Workshop SDK Mode (e.g. if invoked by workshop runner)
@@ -43,8 +119,10 @@ export default function (apiOrCtx: any) {
         const file = `${queueDir}/${Date.now()}.txt`;
         writeFileSync(file, text);
         log(`Requested voice speak: "${text}"`);
+      } else if (sub === "list") {
+        await listActiveVoice(log);
       } else {
-        log("usage: voice <join|leave|say> [args]");
+        log("usage: voice <join|leave|say|list> [args]");
       }
     });
     return;
@@ -95,8 +173,11 @@ export default function (apiOrCtx: any) {
       writeFileSync(file, text);
       write(`Requested voice speak: "${text}"`);
       return { ok: true };
+    } else if (subsub === "list") {
+      await listActiveVoice(write);
+      return { ok: true };
     } else {
-      write("usage: maw no10 voice <join|leave|say> [args]");
+      write("usage: maw no10 voice <join|leave|say|list> [args]");
       return { ok: false };
     }
   } else {

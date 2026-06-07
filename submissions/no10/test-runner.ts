@@ -15,8 +15,16 @@ plugin({
 });
 
 console.log("\n--- Testing voice say ---");
-plugin({
+await plugin({
   source: "cli",
   args: ["voice", "say", "สวัสดีครับ ผม โนสิบเอ็กซ์"],
   writer: (msg: string) => console.log(msg)
 });
+
+console.log("\n--- Testing voice list ---");
+await plugin({
+  source: "cli",
+  args: ["voice", "list"],
+  writer: (msg: string) => console.log(msg)
+});
+
