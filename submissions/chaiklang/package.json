@@ -1,0 +1,11 @@
+{
+  "name": "maw-chaiklang-voice",
+  "version": "2.0.0",
+  "type": "module",
+  "dependencies": {
+    "discord.js": "^14",
+    "@discordjs/voice": "^0.17",
+    "@discordjs/opus": "^0.9",
+    "libsodium-wrappers": "^0.7"
+  }
+}

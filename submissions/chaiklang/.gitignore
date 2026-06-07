@@ -1,0 +1,7 @@
+node_modules/
+.env
+*.token
+.tts.*
+say-queue.txt
+voice.pid
+.DS_Store
