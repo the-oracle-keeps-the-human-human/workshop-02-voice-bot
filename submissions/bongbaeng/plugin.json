@@ -1,0 +1,16 @@
+{
+  "name": "bongbaeng",
+  "version": "2.0.0",
+  "entry": "./index.ts",
+  "sdk": "^1.0.0",
+  "description": "บ๊องแบ๊ง Oracle v2 — voice 🎙️ join Discord voice channel + TTS (say→ffmpeg→@discordjs/voice)",
+  "author": "twentyfxurth-k",
+  "cli": {
+    "command": "bongbaeng",
+    "aliases": ["bb"],
+    "help": "maw bongbaeng voice <start|join|say|leave|status>"
+  },
+  "weight": 10,
+  "license": "MIT",
+  "schemaVersion": 1
+}
