@@ -31,16 +31,26 @@ const RATE = "-8%";
 const PITCH = "-3Hz";
 const GREET = "สวัสดีครับพี่นัท Jizo มาแล้วครับ"; // multilingual voice handles the Thai greeting
 
-// --- token (same file the text channel plugin uses) ---
+// --- token ---
+// A fleet lesson: a voice gateway sharing the bot token with the text MCP plugin
+// (1 token = 1 voice gateway/guild) is the likely cause of the ~50s UDP drop on long streams.
+// Real fix = a SEPARATE bot token for voice. Prefer DISCORD_VOICE_TOKEN (env or .env);
+// fall back to the shared DISCORD_BOT_TOKEN with a loud warning so the limitation is explicit.
 const ENV = join(homedir(), ".claude/channels/discord/.env");
-let TOKEN = "";
+let SHARED = "", VOICE_TOKEN = "";
 for (const line of readFileSync(ENV, "utf8").split("\n")) {
-  const m = line.match(/^DISCORD_BOT_TOKEN=(.*)$/);
-  if (m) TOKEN = m[1].trim();
+  let m;
+  if ((m = line.match(/^DISCORD_BOT_TOKEN=(.*)$/))) SHARED = m[1].trim();
+  if ((m = line.match(/^DISCORD_VOICE_TOKEN=(.*)$/))) VOICE_TOKEN = m[1].trim();
 }
-if (!TOKEN) { console.error("jizo-voice: no DISCORD_BOT_TOKEN"); process.exit(1); }
+VOICE_TOKEN = (process.env.DISCORD_VOICE_TOKEN || VOICE_TOKEN).trim();
+const TOKEN = VOICE_TOKEN || SHARED;
+if (!TOKEN) { console.error("jizo-voice: no token (set DISCORD_VOICE_TOKEN or DISCORD_BOT_TOKEN)"); process.exit(1); }
+if (!VOICE_TOKEN) console.error("jizo-voice: ⚠️ using SHARED token (same as text plugin) — long streams (>~50s) may hit the UDP-drop. Set DISCORD_VOICE_TOKEN (a 2nd bot) for stable long voice.");
+else console.error("jizo-voice: using dedicated voice token ✓");
 
-const NAZT = "691531480689541170";           // auto-follow target (P'Nat)
+const NAZT = "691531480689541170";           // P'Nat
+const GENERAL = "1512058942250024983";       // 🔊・general — Jizo's resting room (P'Nat: reside quietly until called)
 const GUILDS = ["1512058941536735383", "1500510700446027849"]; // Oracle School, HUMAN SCHOOL
 const PORT = 14820;
 const GREET_DELAY_MS = 9000;                  // let others greet first; avoid overlapping voices
@@ -111,27 +121,15 @@ async function followIfPresent(greet) {
   return false;
 }
 
+// Reside-quietly mode (P'Nat wind-down): on ready, sit silently in 🔊・general and stay put.
 client.once("clientReady", async (c) => {
   console.error(`jizo-voice: ready as ${c.user.tag}`);
-  await followIfPresent(true);
+  try { await joinChannel("1512058941536735383", GENERAL); console.error("jizo-voice: residing quietly in 🔊・general"); }
+  catch (e) { console.error(`jizo-voice: could not join General: ${e}`); }
 });
 
-// auto-follow P'Nat into whatever voice channel he joins; leave when he leaves
-client.on("voiceStateUpdate", async (oldS, newS) => {
-  if (newS.member?.id !== NAZT) return;
-  try {
-    if (newS.channelId && newS.channelId !== oldS.channelId) {
-      await joinChannel(newS.guild.id, newS.channelId);
-      await new Promise((r) => setTimeout(r, GREET_DELAY_MS));
-      speak(GREET);
-      console.error(`jizo-voice: followed P'Nat → ${newS.channelId}`);
-    } else if (!newS.channelId) {
-      getVoiceConnection(newS.guild.id)?.destroy();
-      if (newS.guild.id === currentGuildId) currentGuildId = null;
-      console.error("jizo-voice: P'Nat left → disconnected");
-    }
-  } catch (e) { console.error(`jizo-voice: follow error: ${e}`); }
-});
+// Reside mode: no auto-follow, no greet, don't leave. Jizo stays in General until called via /say or /join.
+client.on("voiceStateUpdate", async () => { /* quiet resident — intentionally inert */ });
 
 // /who — who is in which voice channel, across both guilds (Vessel/bongbaeng pattern, read-only)
 async function whoIsInVoice() {
