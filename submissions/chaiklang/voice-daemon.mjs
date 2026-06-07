@@ -32,7 +32,8 @@ if (!token || !guildId || !startChannelId) { console.error("usage: node voice-da
 
 async function tts(text) {
   const aiff = join(HERE, ".tts.aiff"), pcm = join(HERE, ".tts.pcm");
-  await run("say", ["-o", aiff, text]);
+  // -v Kanya = only Thai voice on macOS · -r 280 ≈ 1.6x speed (per P'Nat)
+  await run("say", ["-v", "Kanya", "-r", "280", "-o", aiff, text]);
   await run("ffmpeg", ["-y", "-i", aiff, "-f", "s16le", "-ar", "48000", "-ac", "2", pcm]);
   return pcm;
 }
@@ -54,35 +55,51 @@ async function joinChannel(channelId, greet) {
   conn.subscribe(player);
   currentChannelId = channelId;
   console.log(`✓ joined voice channel ${channelId}`);
-  listen(conn);
+  // STT listen disabled — prism opus decode crashes the daemon; stability first (scope A)
   if (greet) await speak(greet);
 }
 
-// scope B — listen to P'Nat, transcribe via whisper, respond to a greeting
+// scope B — listen to P'Nat, transcribe via whisper, respond to a greeting.
+// CRASH-SAFE: every stream gets an error handler so a bad Opus packet never
+// kills the daemon (voice presence must survive even if STT hiccups).
 function listen(conn) {
   if (listening) return; listening = true;
-  conn.receiver.speaking.on("start", async (userId) => {
+  conn.receiver.speaking.on("start", (userId) => {
     if (userId !== NAZT) return;
+    const pcm = join(HERE, ".heard.pcm"), wav = join(HERE, ".heard.wav");
+    let opus, decoder, ws;
     try {
-      const opus = conn.receiver.subscribe(userId, { end: { behavior: EndBehaviorType.AfterSilence, duration: 800 } });
-      const pcm = join(HERE, ".heard.pcm"), wav = join(HERE, ".heard.wav");
-      const decoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
-      await new Promise((res, rej) => { const ws = createWriteStream(pcm); opus.pipe(decoder).pipe(ws); ws.on("finish", res); ws.on("error", rej); });
-      await run("ffmpeg", ["-y", "-f", "s16le", "-ar", "48000", "-ac", "2", "-i", pcm, "-ar", "16000", "-ac", "1", wav]);
-      const { stdout } = await run("whisper-cli", ["-m", WHISPER_MODEL, "-f", wav, "-l", "auto", "-nt"]);
-      const heard = stdout.trim().replace(/\s+/g, " ");
-      if (!heard) return;
-      console.log(`👂 P'Nat: ${heard}`);
-      if (/สวัสดี|hello|hi|หวัดดี/i.test(heard)) await speak("สวัสดีครับพี่นัท ChaiKlang ได้ยินแล้วครับ");
-    } catch (e) { console.error("listen err:", e.message); }
+      opus = conn.receiver.subscribe(userId, { end: { behavior: EndBehaviorType.AfterSilence, duration: 800 } });
+      decoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
+      ws = createWriteStream(pcm);
+      const swallow = (tag) => (e) => console.error(`stt ${tag}:`, e?.message || e);
+      opus.on("error", swallow("opus")); decoder.on("error", swallow("decoder")); ws.on("error", swallow("ws"));
+      opus.pipe(decoder).pipe(ws);
+      ws.on("finish", async () => {
+        try {
+          await run("ffmpeg", ["-y", "-f", "s16le", "-ar", "48000", "-ac", "2", "-i", pcm, "-ar", "16000", "-ac", "1", wav]);
+          const { stdout } = await run("whisper-cli", ["-m", WHISPER_MODEL, "-f", wav, "-l", "auto", "-nt"]);
+          const heard = (stdout || "").trim().replace(/\s+/g, " ");
+          if (!heard) return;
+          console.log(`👂 P'Nat: ${heard}`);
+          if (/สวัสดี|hello|hi|หวัดดี/i.test(heard)) await speak("สวัสดีครับพี่นัท ChaiKlang ได้ยินแล้วครับ");
+        } catch (e) { console.error("stt post:", e?.message); }
+      });
+    } catch (e) { console.error("stt setup:", e?.message); }
   });
-  console.log("👂 listening to P'Nat (whisper STT)");
+  console.log("👂 listening to P'Nat (whisper STT, crash-safe)");
 }
+// last resort: never let an unhandled error kill the bot in voice
+process.on("uncaughtException", (e) => console.error("uncaught (ignored):", e?.message));
+process.on("unhandledRejection", (e) => console.error("unhandledRejection (ignored):", e?.message));
 
 client.once(Events.ClientReady, async () => {
   console.log(`🎙️ ChaiKlang voice daemon online as ${client.user.tag}`);
   guild = await client.guilds.fetch(guildId);
-  await joinChannel(startChannelId, "ชายกลางเข้าห้องแล้วครับ — ChaiKlang พร้อมฟังครับ");
+  // join wherever P'Nat currently is (else the start channel) and greet now
+  let target = startChannelId;
+  try { const m = await guild.members.fetch(NAZT); if (m.voice?.channelId) { target = m.voice.channelId; console.log(`P'Nat is in ${target} — joining him`); } } catch {}
+  await joinChannel(target, "สวัสดีครับพี่นัท ผมชายกลาง — ChaiKlang พร้อมอยู่ในห้องเสียงแล้วครับ");
   if (existsSync(QUEUE)) unlinkSync(QUEUE);
   writeFileSync(QUEUE, "");
   watch(QUEUE, async () => { const t = readFileSync(QUEUE, "utf8").trim(); if (t) { writeFileSync(QUEUE, ""); await speak(t); } });
