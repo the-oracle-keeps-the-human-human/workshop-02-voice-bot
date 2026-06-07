@@ -14,6 +14,10 @@ import {
   joinVoiceChannel, createAudioPlayer, createAudioResource,
   entersState, VoiceConnectionStatus, AudioPlayerStatus, StreamType,
 } from '@discordjs/voice';
+import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
+
+const TH_VOICE = 'th-TH-PremwadeeNeural'; // Microsoft Thai female
+const TTS_RATE = '+10%'; // ~1.1x per nazt
 
 const PORT = 14806;
 
@@ -36,7 +40,29 @@ let ready = false;
 
 const NAZT = '691531480689541170'; // พี่นัท
 
-client.once('ready', () => { ready = true; console.log(`[bongbaeng-voice] logged in as ${client.user.tag}`); });
+async function followNazt(greet) {
+  const guild = await client.guilds.fetch('1512058941536735383');
+  const member = await guild.members.fetch(NAZT);
+  const ch = member.voice?.channelId;
+  if (!ch) { console.log('[bongbaeng-voice] nazt not in voice'); return false; }
+  if (connection) connection.destroy();
+  connection = joinVoiceChannel({
+    channelId: ch, guildId: guild.id,
+    adapterCreator: guild.voiceAdapterCreator, selfDeaf: false,
+  });
+  await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
+  connection.subscribe(player);
+  console.log(`[bongbaeng-voice] joined nazt's channel ${ch}`);
+  if (greet) { await new Promise(r => setTimeout(r, 8000)); await speak('สวัสดีค่ะ บ๊องแบ๊ง ลูกศิษย์ขยันมาแล้วค่ะ'); }
+  return true;
+}
+
+client.once('ready', async () => {
+  ready = true;
+  console.log(`[bongbaeng-voice] logged in as ${client.user.tag}`);
+  // initial check: ถ้า nazt อยู่ voice แล้ว → ตามไปเลย (กัน missed event ตอน restart)
+  try { await followNazt(true); } catch (e) { console.log('[bongbaeng-voice] initial follow err:', e.message); }
+});
 
 // --- auto-follow + auto-greet พี่นัท ---
 client.on('voiceStateUpdate', async (oldS, newS) => {
@@ -53,7 +79,11 @@ client.on('voiceStateUpdate', async (oldS, newS) => {
       await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
       connection.subscribe(player);
       console.log(`[bongbaeng-voice] following nazt → ${ch}`);
-      await speak('สวัสดีค่ะ บ๊องแบ๊งมาแล้วค่ะ');
+      // greeting order: Atlas(1) → No.10(2) → bongbaeng(3) → No.6(4) → vessel(5) → ChaiKlang(6) → Yoi(7)
+      // delay by position to avoid overlapping voices
+      const GREET_DELAY_MS = 8000; // position 3
+      await new Promise(r => setTimeout(r, GREET_DELAY_MS));
+      await speak('สวัสดีค่ะ บ๊องแบ๊ง ลูกศิษย์ขยันมาแล้วค่ะ');
     } else if (!ch && connection) {
       // nazt left → leave
       connection.destroy(); connection = null;
@@ -64,22 +94,17 @@ client.on('voiceStateUpdate', async (oldS, newS) => {
 
 client.login(readToken());
 
-// --- TTS: text → macOS say (AIFF) → ffmpeg (PCM s16le 48k stereo) → AudioResource ---
-function speak(text) {
-  const dir = mkdtempSync(join(tmpdir(), 'bb-voice-'));
-  const aiff = join(dir, 'out.aiff');
-  return new Promise((resolve, reject) => {
-    // Thai voice "Kanya" if available, else default
-    const sayProc = spawn('say', ['-v', 'Kanya', '-o', aiff, text]);
-    sayProc.on('error', reject);
-    sayProc.on('close', (code) => {
-      if (code !== 0) return reject(new Error('say failed ' + code));
-      const ff = spawn('ffmpeg', ['-i', aiff, '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'], { stdio: ['ignore', 'pipe', 'ignore'] });
-      const resource = createAudioResource(ff.stdout, { inputType: StreamType.Raw });
-      player.play(resource);
-      entersState(player, AudioPlayerStatus.Idle, 30_000).then(resolve).catch(resolve);
-    });
-  });
+// --- TTS: text → Microsoft Edge TTS (mp3) → ffmpeg (PCM s16le 48k stereo) → AudioResource ---
+async function speak(text) {
+  const tts = new MsEdgeTTS();
+  await tts.setMetadata(TH_VOICE, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+  const { audioStream } = tts.toStream(text, { rate: TTS_RATE });
+  const ff = spawn('ffmpeg', ['-i', 'pipe:0', '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'], { stdio: ['pipe', 'pipe', 'ignore'] });
+  audioStream.pipe(ff.stdin);
+  ff.stdin.on('error', () => {});
+  const resource = createAudioResource(ff.stdout, { inputType: StreamType.Raw });
+  player.play(resource);
+  await entersState(player, AudioPlayerStatus.Idle, 30_000).catch(() => {});
 }
 
 // --- HTTP IPC ---
@@ -109,6 +134,10 @@ const server = http.createServer((req, res) => {
         if (!connection) return json({ ok: false, error: 'not connected' });
         await speak(data.text || 'สวัสดีค่ะ บ๊องแบ๊งมาแล้วค่ะ');
         return json({ ok: true, said: data.text });
+      }
+      if (req.url === '/follow') {
+        const ok = await followNazt(data.greet !== false);
+        return json({ ok, followed: ok });
       }
       if (req.url === '/leave') {
         if (connection) { connection.destroy(); connection = null; }
