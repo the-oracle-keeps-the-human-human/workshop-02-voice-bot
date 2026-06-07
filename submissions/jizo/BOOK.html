@@ -33,6 +33,9 @@
   footer { margin-top: 22px; padding-top: 8px; border-top: 1px solid #d8d6cd;
     color: #6b6862; font-size: 9pt; }
   ul { margin: 6px 0; padding-left: 20px; } li { margin: 3px 0; }
+  figure { margin: 14px 0; }
+  figure img { width: 100%; border: 1px solid #d8d6cd; border-radius: 6px; display: block; }
+  figcaption { color: #6b6862; font-size: 9pt; text-align: center; margin-top: 5px; }
 </style></head><body>
 
 <section class="cover">
@@ -81,6 +84,11 @@
   + error state ที่ซื่อสัตย์ หน้าเว็บเปิดได้ใน 0.38 วินาที</p>
   <p><b>ข้อสังเกตสำคัญ:</b> <code>&amp;display=swap</code> ไม่ได้ทำให้ตัว <code>&lt;link&gt;</code> ไม่บล็อก —
   มีแค่การเอามันออกจาก critical path เท่านั้นที่แก้ได้จริง</p>
+  <figure>
+    <img src="proof-frontend.png" alt="Jizo Chronicle viewer live">
+    <figcaption>หลักฐาน: jizo-gh-live หลังแก้ — โหลด 50 events จริง, 0 console error
+    (ตรวจด้วย Chromium จริงผ่าน Playwright)</figcaption>
+  </figure>
 </section>
 
 <section class="chapter">
@@ -172,6 +180,24 @@ curl --data-binary @story.pcm http://127.0.0.1:14820/feed</pre>
     <tr><td>พลาด P'Nat ที่อยู่ก่อนบูต</td><td>initial-follow-on-ready</td></tr>
     <tr><td>1 token = 1 voice gateway/guild</td><td>daemon เสียงแยกต้องใช้ token คนละตัว</td></tr>
   </table>
+</section>
+
+<section class="chapter">
+  <span class="tag">ภาคผลงาน</span>
+  <h2>หลักฐาน (Proof of Work)</h2>
+  <figure>
+    <img src="proof-frontend.png" alt="Jizo Chronicle viewer live">
+    <figcaption>jizo-gh-live — Chronicle viewer ที่ deploy จริง (50 events, 0 error)</figcaption>
+  </figure>
+  <h3>หลักฐานที่ตรวจสอบแล้ว</h3>
+  <pre>frontend  : curl 16/16 = 200 · Playwright 50 events, 0 console error · paint 0.38s
+voice     : Jizo#9528 in 🔊 general · initial-follow-on-ready fired on real boot
+TTS       : edge-tts → ffmpeg → pcm_s16le 48000Hz 2ch (not the say fallback), 0 errors
+stream    : /feed single socket — playerState held "playing" through the full 1.25x story
+audible   : P'Nat reacted live in-room (asked re: multilingual + 1.15x) = independent witness
+submitted : workshop PR #11 (MERGED) · Community PR #22 · PDF PR #12</pre>
+  <blockquote>ขอบเขตที่ซื่อสัตย์: daemon พิสูจน์ได้ว่า "สร้างเสียง + สตรีมเข้า connection" — ส่วนคุณภาพเสียงในห้อง
+  ตัดสินโดยมนุษย์ที่อยู่ตรงนั้น</blockquote>
 </section>
 
 <section class="chapter">
