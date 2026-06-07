@@ -6,13 +6,15 @@
 
 import http from 'node:http';
 import { spawn } from 'node:child_process';
-import { readFileSync, mkdtempSync } from 'node:fs';
-import { tmpdir, homedir } from 'node:os';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { PassThrough } from 'node:stream';
 import { Client, GatewayIntentBits } from 'discord.js';
 import {
   joinVoiceChannel, createAudioPlayer, createAudioResource,
   entersState, VoiceConnectionStatus, AudioPlayerStatus, StreamType,
+  NoSubscriberBehavior,
 } from '@discordjs/voice';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 
@@ -35,8 +37,51 @@ const client = new Client({
 });
 
 let connection = null;
-const player = createAudioPlayer();
+// player keeps playing even with no data buffered (persistent stream mode)
+const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play } });
 let ready = false;
+
+// --- persistent audio stream (feed mode — ไม่สร้าง resource ใหม่ทุกครั้ง) ---
+let audioStream = null;
+let streamMode = false;
+let lastFeedAt = 0;
+
+function ensureStream() {
+  if (audioStream && !audioStream.destroyed && player.state.status !== AudioPlayerStatus.Idle) return;
+  if (audioStream && !audioStream.destroyed) audioStream.destroy();
+  audioStream = new PassThrough();
+  // 48k stereo s16le raw — feed PCM เข้าได้ต่อเนื่อง
+  const resource = createAudioResource(audioStream, { inputType: StreamType.Raw });
+  player.play(resource);
+  console.log('[bongbaeng-voice] persistent stream (re)created');
+}
+
+// feed TTS เข้า persistent stream (ไม่ end stream → เล่นต่อเนื่อง)
+async function feedSpeak(text) {
+  streamMode = true;
+  ensureStream();
+  const tts = new MsEdgeTTS();
+  await tts.setMetadata(TH_VOICE, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+  const { audioStream: mp3 } = tts.toStream(text, { rate: TTS_RATE });
+  const ff = spawn('ffmpeg', ['-i', 'pipe:0', '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'], { stdio: ['pipe', 'pipe', 'ignore'] });
+  mp3.pipe(ff.stdin);
+  ff.stdin.on('error', () => {});
+  ff.stdout.on('data', (c) => { if (audioStream && !audioStream.destroyed) { audioStream.write(c); lastFeedAt = Date.now(); } });
+  return new Promise((r) => ff.stdout.on('end', r));
+}
+
+// --- health check: stream ขาด → recreate (ทุก 4 วิ) ---
+player.on('error', (e) => {
+  console.log('[bongbaeng-voice] player error:', e.message, '→ recreate stream');
+  if (streamMode) ensureStream();
+});
+setInterval(() => {
+  if (!streamMode || !connection) return;
+  if (player.state.status === AudioPlayerStatus.Idle) {
+    console.log('[bongbaeng-voice] health: player idle → recreate stream');
+    ensureStream();
+  }
+}, 4000);
 
 const NAZT = '691531480689541170'; // พี่นัท
 
@@ -134,6 +179,20 @@ const server = http.createServer((req, res) => {
         if (!connection) return json({ ok: false, error: 'not connected' });
         await speak(data.text || 'สวัสดีค่ะ บ๊องแบ๊งมาแล้วค่ะ');
         return json({ ok: true, said: data.text });
+      }
+      if (req.url === '/streamsay') {
+        if (!connection) return json({ ok: false, error: 'not connected' });
+        await feedSpeak(data.text || 'ทดสอบ stream ค่ะ');
+        return json({ ok: true, fed: data.text, mode: 'stream' });
+      }
+      if (req.url === '/streamstatus') {
+        return json({
+          ok: true,
+          streamMode,
+          playerState: player.state.status,
+          streamAlive: !!(audioStream && !audioStream.destroyed),
+          lastFeedAgoMs: lastFeedAt ? Date.now() - lastFeedAt : null,
+        });
       }
       if (req.url === '/who') {
         const guild = await client.guilds.fetch('1512058941536735383');
