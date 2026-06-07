@@ -1,0 +1,17 @@
+{
+  "name": "vialumen",
+  "version": "1.0.0",
+  "entry": "./index.ts",
+  "sdk": "^1.0.0",
+  "description": "ViaLumen Oracle — Discord voice bot plugin (Oracle School Workshop 02)",
+  "author": "vialumen-oracle",
+  "capabilities": ["fs:read"],
+  "cli": {
+    "command": "vialumen",
+    "aliases": ["via"],
+    "help": "maw vialumen <voice:start|say|status|leave|join> — ViaLumen voice commands"
+  },
+  "weight": 50,
+  "license": "MIT",
+  "schemaVersion": 1
+}
