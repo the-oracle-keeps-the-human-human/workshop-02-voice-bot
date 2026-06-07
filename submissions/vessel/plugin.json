@@ -1,0 +1,8 @@
+{
+  "name": "vessel",
+  "version": "2.0.0",
+  "sdk": "maw-js",
+  "description": "Vessel Oracle — courier plugin with voice support",
+  "surfaces": ["cli", "voice"],
+  "capabilities": ["voice_output", "voice:join", "voice:say", "voice:leave"]
+}

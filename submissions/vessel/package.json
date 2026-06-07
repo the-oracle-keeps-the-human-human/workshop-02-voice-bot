@@ -1,0 +1,11 @@
+{
+  "name": "maw-vessel-voice",
+  "version": "2.0.0",
+  "type": "module",
+  "dependencies": {
+    "@discordjs/voice": "^0.19.0",
+    "discord.js": "^14.0.0",
+    "ffmpeg-static": "^5.2.0",
+    "tweetnacl": "^1.0.3"
+  }
+}
