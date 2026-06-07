@@ -61,6 +61,14 @@ export default async function handler(ctx: InvokeContext): Promise<InvokeResult>
       log(pid ? `🟢 voice daemon online (pid ${pid})` : "⚪ voice daemon ไม่ได้รัน");
       return done(true);
     }
+    case "who": {
+      const guildId = args[2] || "1512058941536735383";
+      try {
+        const out = execFileSync("node", [join(HERE, "voice-who.mjs"), guildId], { env: process.env, encoding: "utf8" });
+        log(out.trim());
+      } catch (e) { log(`✗ who failed: ${e instanceof Error ? e.message : e}`); return done(false); }
+      return done(true);
+    }
     case "leave": {
       const pid = running();
       if (!pid) { log("⚪ ไม่มี daemon ให้ปิด"); return done(true); }

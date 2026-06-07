@@ -31,11 +31,12 @@ const token = process.env.DISCORD_BOT_TOKEN;
 if (!token || !guildId || !startChannelId) { console.error("usage: node voice-daemon.mjs <guildId> <channelId>"); process.exit(1); }
 
 async function tts(text) {
-  const aiff = join(HERE, ".tts.aiff"), pcm = join(HERE, ".tts.pcm");
-  // -v Kanya = only Thai voice on macOS · -r 280 ≈ 1.6x speed (per P'Nat)
-  await run("say", ["-v", "Kanya", "-r", "280", "-o", aiff, text]);
-  await run("ffmpeg", ["-y", "-i", aiff, "-f", "s16le", "-ar", "48000", "-ac", "2", pcm]);
-  return pcm;
+  const aiff = join(HERE, ".tts.aiff"), wav = join(HERE, ".tts.wav");
+  // -v Kanya = only Thai voice on macOS · -r 193 ≈ 1.1x speed (per P'Nat — 1.6x was too fast)
+  await run("say", ["-v", "Kanya", "-r", "193", "-o", aiff, text]);
+  // standard 48k stereo WAV — let @discordjs/voice transcode to Opus (robust; raw PCM was silent)
+  await run("ffmpeg", ["-y", "-i", aiff, "-ar", "48000", "-ac", "2", wav]);
+  return wav;
 }
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
@@ -43,9 +44,12 @@ const player = createAudioPlayer();
 let guild, currentChannelId = null, listening = false;
 
 async function speak(text) {
-  const pcm = await tts(text);
-  player.play(createAudioResource(pcm, { inputType: "raw" }));
+  const wav = await tts(text);
+  // no inputType → @discordjs/voice auto-detects WAV + transcodes to Opus via ffmpeg (audible!)
+  const resource = createAudioResource(wav);
+  player.play(resource);
   await entersState(player, AudioPlayerStatus.Playing, 5_000).catch(() => {});
+  await entersState(player, AudioPlayerStatus.Idle, 15_000).catch(() => {});  // wait until finished
   console.log(`🗣️ spoke: ${text.slice(0, 60)}`);
 }
 
