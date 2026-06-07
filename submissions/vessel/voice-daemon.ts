@@ -31,10 +31,31 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
 });
 
+// nazt_'s Discord user ID — follow him into voice channels
+const FOLLOW_USER_ID = process.env.FOLLOW_USER_ID || "691531480689541170";
+
 let connection: ReturnType<typeof joinVoiceChannel> | null = null;
 let player = createAudioPlayer();
 
 client.once("ready", () => console.log(`[vessel-voice] discord ready: ${client.user?.tag}`));
+
+// Auto-follow: when FOLLOW_USER_ID joins a voice channel, Vessel follows
+client.on("voiceStateUpdate", async (oldState, newState) => {
+  if (newState.member?.id !== FOLLOW_USER_ID) return;
+  const newChannel = newState.channel;
+  if (!newChannel) return; // user left, don't auto-leave
+  if (connection?.joinConfig.channelId === newChannel.id) return; // already there
+  console.log(`[vessel-voice] following ${FOLLOW_USER_ID} to ${newChannel.name}`);
+  connection?.destroy();
+  connection = joinVoiceChannel({
+    channelId: newChannel.id,
+    guildId: newChannel.guild.id,
+    adapterCreator: newChannel.guild.voiceAdapterCreator,
+  });
+  connection.subscribe(player);
+  connection.on(VoiceConnectionStatus.Disconnected, () => { connection = null; });
+});
+
 client.login(TOKEN);
 
 async function ttsStream(text: string) {
