@@ -33,10 +33,11 @@ if (!token || !guildId || !startChannelId) { console.error("usage: node voice-da
 const EDGE_TTS = "/Users/bms/.local/bin/edge-tts";
 const VOICE = "th-TH-NiwatNeural";   // Microsoft neural Thai (male) — natural, not robotic Kanya
 async function tts(text) {
-  const mp3 = join(HERE, ".tts.mp3");
-  // edge-tts = Microsoft Azure neural voice (what P'Nat wanted); +8% rate ≈ natural-brisk
+  const mp3 = join(HERE, ".tts.mp3"), wav = join(HERE, ".tts.wav");
+  // edge-tts (neural voice) → mp3, then ffmpeg → WAV 48k stereo (the audible pipeline; mp3-direct was silent)
   await run(EDGE_TTS, ["--voice", VOICE, "--rate", "+8%", "--text", text, "--write-media", mp3]);
-  return mp3;  // @discordjs/voice auto-transcodes mp3 → Opus
+  await run("ffmpeg", ["-y", "-i", mp3, "-ar", "48000", "-ac", "2", wav]);
+  return wav;
 }
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
