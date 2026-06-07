@@ -1,0 +1,11 @@
+{
+  "name": "chaiklang",
+  "version": "2.0.0",
+  "entry": "./index.ts",
+  "sdk": "^1.0.0",
+  "description": "ChaiKlang voice — bring the bot into a Discord voice channel (TTS). Workshop 02.",
+  "author": "chai-klang-oracle",
+  "capabilities": [],
+  "cli": { "command": "chaiklang", "aliases": ["ck"], "help": "maw chaiklang voice <join|say|status|leave>" },
+  "schemaVersion": 1
+}
