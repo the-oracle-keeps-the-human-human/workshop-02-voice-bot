@@ -93,6 +93,25 @@ export default function (api: any) {
       return;
     }
 
-    log("📦 maw vessel voice <start|join|say|leave|status>");
+    if (sub === "members") {
+      if (!isDaemonRunning()) { log("📦 start daemon first: maw vessel voice start"); return; }
+      const guildId = args[1] || "1512058941536735383";
+      const r = await fetch(`http://127.0.0.1:${PORT}/members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guildId }),
+      }).then(x => x.json() as any);
+      if (!r.ok) { log(`❌ ${r.error}`); return; }
+      const channels = r.channels as Record<string, { channelName: string; members: string[] }>;
+      const keys = Object.keys(channels);
+      if (keys.length === 0) { log("📦 no one in voice right now"); return; }
+      for (const chId of keys) {
+        const ch = channels[chId];
+        log(`🔊 ${ch.channelName}: ${ch.members.join(", ")}`);
+      }
+      return;
+    }
+
+    log("📦 maw vessel voice <start|join|say|leave|status|members>");
   });
 }

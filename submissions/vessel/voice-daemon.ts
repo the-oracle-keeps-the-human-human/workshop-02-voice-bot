@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 import { writeFileSync, unlinkSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
+import { PassThrough } from "node:stream";
 import { Client, GatewayIntentBits } from "discord.js";
 
 const require = createRequire(import.meta.url);
@@ -42,7 +43,41 @@ const FOLLOW_USER_ID = process.env.FOLLOW_USER_ID || "691531480689541170";
 let connection: ReturnType<typeof joinVoiceChannel> | null = null;
 let player = createAudioPlayer();
 
-client.once("ready", () => console.log(`[vessel-voice] discord ready: ${client.user?.tag}`));
+// Persistent PCM stream — any process can pipe raw audio in via POST /feed
+// ffmpeg → pipe:1 → POST /feed → audioFeed → Discord voice (no ad-hoc per-clip setup)
+const audioFeed = new PassThrough();
+let feedActive = false;
+
+function startFeed() {
+  if (feedActive) return;
+  feedActive = true;
+  const resource = createAudioResource(audioFeed, { inputType: StreamType.Raw });
+  player.play(resource);
+  player.once(AudioPlayerStatus.Idle, () => { feedActive = false; });
+}
+
+// Track who is in which voice channel: userId → { channelId, channelName, displayName }
+const voiceMap = new Map<string, { channelId: string; channelName: string; displayName: string }>();
+
+client.once("ready", async () => {
+  console.log(`[vessel-voice] discord ready: ${client.user?.tag}`);
+  // Seed voice map from existing voice states via channels
+  try {
+    const guild = await client.guilds.fetch("1512058941536735383");
+    const channels = await guild.channels.fetch();
+    for (const [, ch] of channels) {
+      if (!ch?.isVoiceBased()) continue;
+      const vc = ch as any;
+      if (!vc.members) continue;
+      for (const [uid, member] of vc.members) {
+        voiceMap.set(uid, { channelId: ch.id, channelName: ch.name, displayName: member.displayName });
+      }
+    }
+    console.log(`[vessel-voice] voice map seeded: ${voiceMap.size} members`);
+  } catch (e) {
+    console.error("[vessel-voice] seed error:", e);
+  }
+});
 
 async function waitForReady(conn: ReturnType<typeof joinVoiceChannel>) {
   try {
@@ -63,6 +98,18 @@ async function joinChannel(channelId: string, guildId: string, adapterCreator: a
   connection = conn;
   return conn;
 }
+
+// Track all voice state changes for /members
+client.on("voiceStateUpdate", (oldState, newState) => {
+  const uid = newState.member?.id || oldState.member?.id;
+  const displayName = newState.member?.displayName || oldState.member?.displayName || uid;
+  if (!uid) return;
+  if (newState.channel) {
+    voiceMap.set(uid, { channelId: newState.channel.id, channelName: newState.channel.name, displayName: displayName! });
+  } else {
+    voiceMap.delete(uid);
+  }
+});
 
 // Auto-follow: when FOLLOW_USER_ID joins a voice channel, Vessel follows + greets
 client.on("voiceStateUpdate", async (oldState, newState) => {
@@ -158,6 +205,28 @@ const server = createServer(async (req, res) => {
       inVoice: connection !== null,
       playerState: player.state.status,
     }));
+    return;
+  }
+
+  // POST /feed — pipe raw PCM s16le 48kHz stereo directly into Discord voice
+  // Usage: ffmpeg -i input.mp3 -f s16le -ar 48000 -ac 2 - | curl -X POST --data-binary @- http://127.0.0.1:14808/feed
+  if (req.method === "POST" && url.pathname === "/feed") {
+    if (!connection) { res.writeHead(400); res.end(JSON.stringify({ error: "not in voice channel" })); return; }
+    startFeed();
+    req.pipe(audioFeed, { end: false });
+    req.on("end", () => res.end(JSON.stringify({ ok: true })));
+    res.writeHead(200);
+    return;
+  }
+
+  if (url.pathname === "/members") {
+    // Group voiceMap by channel
+    const channels: Record<string, { channelName: string; members: string[] }> = {};
+    for (const [, vs] of voiceMap) {
+      if (!channels[vs.channelId]) channels[vs.channelId] = { channelName: vs.channelName, members: [] };
+      channels[vs.channelId].members.push(vs.displayName);
+    }
+    res.writeHead(200); res.end(JSON.stringify({ ok: true, channels }));
     return;
   }
 
