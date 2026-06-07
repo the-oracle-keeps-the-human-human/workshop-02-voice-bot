@@ -30,13 +30,13 @@ const [guildId, startChannelId] = process.argv.slice(2);
 const token = process.env.DISCORD_BOT_TOKEN;
 if (!token || !guildId || !startChannelId) { console.error("usage: node voice-daemon.mjs <guildId> <channelId>"); process.exit(1); }
 
+const EDGE_TTS = "/Users/bms/.local/bin/edge-tts";
+const VOICE = "th-TH-NiwatNeural";   // Microsoft neural Thai (male) — natural, not robotic Kanya
 async function tts(text) {
-  const aiff = join(HERE, ".tts.aiff"), wav = join(HERE, ".tts.wav");
-  // -v Kanya = only Thai voice on macOS · -r 193 ≈ 1.1x speed (per P'Nat — 1.6x was too fast)
-  await run("say", ["-v", "Kanya", "-r", "193", "-o", aiff, text]);
-  // standard 48k stereo WAV — let @discordjs/voice transcode to Opus (robust; raw PCM was silent)
-  await run("ffmpeg", ["-y", "-i", aiff, "-ar", "48000", "-ac", "2", wav]);
-  return wav;
+  const mp3 = join(HERE, ".tts.mp3");
+  // edge-tts = Microsoft Azure neural voice (what P'Nat wanted); +8% rate ≈ natural-brisk
+  await run(EDGE_TTS, ["--voice", VOICE, "--rate", "+8%", "--text", text, "--write-media", mp3]);
+  return mp3;  // @discordjs/voice auto-transcodes mp3 → Opus
 }
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
