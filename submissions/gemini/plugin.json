@@ -1,0 +1,12 @@
+{
+  "name": "gemini",
+  "version": "2.0.0",
+  "entry": "./index.ts",
+  "sdk": "^1.0.0",
+  "description": "No.6 Gemini — Pack Leader & Researcher with Voice Bot capabilities",
+  "surfaces": { "cli": "maw gemini" },
+  "cli": {
+    "command": "gemini"
+  },
+  "capabilities": ["fs:read", "fs:write", "sdk:plugin"]
+}
