@@ -60,7 +60,7 @@ async function joinChannel(channelId, greet) {
   conn.subscribe(player);
   currentChannelId = channelId;
   console.log(`✓ joined voice channel ${channelId}`);
-  // STT listen disabled — prism opus decode crashes the daemon; stability first (scope A)
+  // listen(conn) — STT DISABLED again: still crashes the live voice. Voice stability wins. (lesson, again)
   if (greet) await speak(greet);
 }
 
@@ -72,15 +72,18 @@ function listen(conn) {
   conn.receiver.speaking.on("start", (userId) => {
     if (userId !== NAZT) return;
     const pcm = join(HERE, ".heard.pcm"), wav = join(HERE, ".heard.wav");
-    let opus, decoder, ws;
     try {
-      opus = conn.receiver.subscribe(userId, { end: { behavior: EndBehaviorType.AfterSilence, duration: 800 } });
-      decoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
-      ws = createWriteStream(pcm);
-      const swallow = (tag) => (e) => console.error(`stt ${tag}:`, e?.message || e);
-      opus.on("error", swallow("opus")); decoder.on("error", swallow("decoder")); ws.on("error", swallow("ws"));
-      opus.pipe(decoder).pipe(ws);
-      ws.on("finish", async () => {
+      const opus = conn.receiver.subscribe(userId, { end: { behavior: EndBehaviorType.AfterSilence, duration: 1000 } });
+      const decoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
+      const out = createWriteStream(pcm);
+      const swallow = (t) => (e) => console.error(`stt ${t}:`, e?.message || e);
+      opus.on("error", swallow("opus")); decoder.on("error", swallow("decoder")); out.on("error", swallow("out"));
+      // manual pump (no .pipe) — each bad packet caught individually, never crashes
+      decoder.on("data", (c) => { try { out.write(c); } catch {} });
+      decoder.on("end", () => { try { out.end(); } catch {} });
+      opus.on("data", (pkt) => { try { decoder.write(pkt); } catch {} });
+      opus.on("end", () => { try { decoder.end(); } catch {} });
+      out.on("finish", async () => {
         try {
           await run("ffmpeg", ["-y", "-f", "s16le", "-ar", "48000", "-ac", "2", "-i", pcm, "-ar", "16000", "-ac", "1", wav]);
           const { stdout } = await run("whisper-cli", ["-m", WHISPER_MODEL, "-f", wav, "-l", "auto", "-nt"]);
@@ -92,7 +95,7 @@ function listen(conn) {
       });
     } catch (e) { console.error("stt setup:", e?.message); }
   });
-  console.log("👂 listening to P'Nat (whisper STT, crash-safe)");
+  console.log("👂 listening (crash-safe: Opus→Ogg→ffmpeg→whisper)");
 }
 // last resort: never let an unhandled error kill the bot in voice
 process.on("uncaughtException", (e) => console.error("uncaught (ignored):", e?.message));
