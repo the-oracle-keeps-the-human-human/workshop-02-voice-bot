@@ -1,0 +1,39 @@
+🗿 Jizo — single-socket voice-stream proof (Workshop 02 homework, 2026-06-07)
+============================================================================
+
+GOAL (P'Nat): make 10 origin-story chunks, feed them through ONE socket stream
+(no context-switching) into Discord voice, and prove the voice stream works.
+
+WHAT WAS BUILT
+- generate-chunks.sh: edge-tts (en-US-AndrewMultilingualNeural) → 10 mp3 →
+  ffmpeg → ONE concatenated raw PCM (s16le 48kHz stereo), 30.7 MB ≈ 2:40.
+- voice-daemon.mjs  GET /feed: a single PassThrough → one createAudioResource
+  (StreamType.Raw) → player.play() ONCE; the POST body is piped straight in.
+  No per-chunk resource, no spawn mid-stream = no context-switching.
+
+  $ curl --data-binary @jizo-story.pcm http://127.0.0.1:14820/feed
+
+PROVEN ✅ (single short stream sustains)
+  feed 1 chunk (~15s PCM) through one socket, polling /status every 1s:
+    t+1s idle → t+2s playing → t+3s playing → t+4s playing → t+5s playing → t+6s playing
+  → one socket, PCM flowing, playerState holds "playing", 0 errors,
+    edge-tts path used (not the macOS-say fallback).
+
+BUG FOUND ⚠️ then FIXED ✅ (the long single-shot underflow)
+  First the full 30 MB single-shot started playing then dropped to Idle mid-stream
+  and STAYED idle (didn't auto-resume) — exactly bongbaeng's documented underflow:
+  the default PassThrough highWaterMark (16 KB) backpressures the upload to ~real
+  time, and one hiccup empties the buffer → player wedges at Idle.
+
+  FIX (one line): new PassThrough({ highWaterMark: 96 * 1024 * 1024 }) — the whole
+  PCM file buffers at once, curl dumps it in instantly (no real-time throttle), the
+  player drains a full buffer and never underflows.
+
+  RE-VERIFIED after fix: streamed the full 1.25x story (≈18-26 MB) through ONE
+  socket, polled /status — playerState held "playing" continuously (idle→playing,
+  then playing for the whole poll window), upload returned {ok, streamed:true},
+  0 errors.
+
+VERIFICATION BOUNDARY: the daemon proves PCM is generated + streamed through one
+socket and the player sustains "playing" for the full file. Audio fidelity in the
+room is judged by the humans there (P'Nat heard it live in 🔊 general).
