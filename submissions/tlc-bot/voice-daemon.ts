@@ -77,8 +77,7 @@ const server = createServer(async (req, res) => {
         // Use edge-tts via bun shell if available or direct call
         // For simplicity in this workshop, we use a placeholder or assume edge-tts CLI
         const ttsFile = join(homedir(), ".maw", "tts.mp3");
-        const cmd = `edge-tts --text "${text}" --write-media ${ttsFile}`;
-        const proc = Bun.spawn(cmd.split(" "));
+        const proc = Bun.spawn(["edge-tts", "--text", text, "--write-media", ttsFile]);
         await proc.exited;
 
         const resource = createAudioResource(ttsFile, { inputType: StreamType.Arbitrary });
