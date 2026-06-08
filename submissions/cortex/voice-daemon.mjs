@@ -96,6 +96,16 @@ client.once("ready", async () => {
   await entersState(conn, VoiceConnectionStatus.Ready, 20_000);
   console.log(`✓ joined voice channel ${channelId}`);
 
+  // graceful shutdown — destroy voice connection BEFORE exit (กัน ghost ค้างใน Discord client)
+  const shutdown = (sig) => {
+    console.log(`\n↩︎ ${sig} — leaving voice channel cleanly`);
+    try { conn.destroy(); } catch {}
+    try { client.destroy(); } catch {}
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+
   const player = createAudioPlayer();
   conn.subscribe(player);
 
