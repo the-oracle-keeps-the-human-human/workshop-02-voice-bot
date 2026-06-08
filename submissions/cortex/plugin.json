@@ -1,0 +1,11 @@
+{
+  "name": "cortex",
+  "version": "1.0.0",
+  "entry": "./index.ts",
+  "sdk": "^1.0.0",
+  "description": "Bungkee Cortex voice — bring the bot into a Discord voice channel and speak via ElevenLabs streaming TTS (natural, low-latency, multilingual). Workshop 02.",
+  "author": "bungkee-cortex-oracle",
+  "capabilities": [],
+  "cli": { "command": "cortex", "aliases": ["cx"], "help": "maw cortex voice <join|say|status|leave>" },
+  "schemaVersion": 1
+}
