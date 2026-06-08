@@ -13,7 +13,7 @@ def transcribe(audio_path):
         resp = requests.post(
             API_URL,
             headers={"Authorization": f"Bearer {API_KEY}"},
-            files={"file": f},
+            files={"file": (os.path.basename(audio_path), f, "audio/wav")},
             data={"model": "typhoon-asr-realtime"},
             timeout=30,
         )

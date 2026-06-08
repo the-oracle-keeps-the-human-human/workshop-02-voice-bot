@@ -28,7 +28,7 @@ const TRANSCRIBE_PY = join(HERE, "transcribe.py");
 
 process.env.DEBUG = "discordjs:voice:*";
 const GREET = "สวัสดีครับ Tonk Oracle เข้าห้องเสียงแล้วครับ";
-let listenEnabled = false;
+let listenEnabled = true;
 let isProcessing = false;
 
 // --- env ---
@@ -141,9 +141,12 @@ async function askLLM(userText) {
 
   try {
     await pexec("tmux", ["send-keys", "-t", "tonk-oracle:1", tmuxCmd, "Enter"], { timeout: 5000 });
+    // Send extra Enter after short delay — tmux send-keys sometimes doesn't trigger Claude Code on first send
+    await new Promise((r) => setTimeout(r, 800));
+    await pexec("tmux", ["send-keys", "-t", "tonk-oracle:1", "Enter"], { timeout: 5000 });
 
-    // Poll for response file (max 30s)
-    for (let i = 0; i < 60; i++) {
+    // Poll for response file (max 45s)
+    for (let i = 0; i < 90; i++) {
       await new Promise((r) => setTimeout(r, 500));
       try {
         const res = readFileSync(resFile, "utf8").trim();
@@ -153,7 +156,7 @@ async function askLLM(userText) {
         }
       } catch {}
     }
-    console.error("tonk-voice: tonk-reply timeout (30s)");
+    console.error("tonk-voice: tonk-reply timeout (45s)");
     return "ขอโทษครับ ตอบไม่ทันครับ";
   } catch (e) {
     console.error(`tonk-voice: askLLM error: ${e}`);
@@ -228,16 +231,42 @@ function startListening(conn) {
 }
 
 // Auto-follow: if P'Nat or TK moves voice channels, follow them
+// Auto-leave: if both P'Nat and TK leave voice, bot leaves too
 client.on("voiceStateUpdate", async (oldState, newState) => {
   const uid = newState.member?.id;
   if (uid !== NAZT && uid !== TK) return;
   const newChannel = newState.channel;
-  if (!newChannel) return;
-  try {
-    const conn = await joinChannel(newState.guild.id, newChannel.id);
-    startListening(conn);
-    console.error(`tonk-voice: followed ${uid === NAZT ? "P'Nat" : "TK"} to ${newChannel.name}`);
-  } catch (e) { console.error(`tonk-voice: follow failed: ${e}`); }
+
+  if (newChannel) {
+    // Owner/teacher joined or moved — follow them
+    // Disconnect from previous guild if moving cross-guild (bot should only be in 1 voice at a time)
+    if (currentGuildId && currentGuildId !== newState.guild.id) {
+      try {
+        getVoiceConnection(currentGuildId)?.destroy();
+        console.error(`tonk-voice: left previous guild ${currentGuildId}`);
+      } catch {}
+    }
+    try {
+      const conn = await joinChannel(newState.guild.id, newChannel.id);
+      startListening(conn);
+      console.error(`tonk-voice: followed ${uid === NAZT ? "P'Nat" : "TK"} to ${newChannel.name}`);
+    } catch (e) { console.error(`tonk-voice: follow failed: ${e}`); }
+  } else {
+    // Owner/teacher disconnected — check if the other is still in our channel
+    if (!currentGuildId || !currentChannelId) return;
+    try {
+      const guild = await client.guilds.fetch(currentGuildId);
+      const ch = await guild.channels.fetch(currentChannelId);
+      if (!ch || ch.type !== 2) return;
+      const hasOwner = ch.members.some((m) => m.id === NAZT || m.id === TK);
+      if (!hasOwner) {
+        console.error("tonk-voice: both P'Nat and TK left — leaving voice");
+        getVoiceConnection(currentGuildId)?.destroy();
+        currentGuildId = null;
+        currentChannelId = null;
+      }
+    } catch (e) { console.error(`tonk-voice: leave-check failed: ${e}`); }
+  }
 });
 
 // /who — voice roster across guild
