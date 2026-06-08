@@ -55,8 +55,10 @@ async function tts(text) {
   const pcm = join(HERE, ".tts.pcm");
   if (xiKey) {
     const mp3 = join(HERE, ".tts.mp3");
+    // eleven_v3 ไม่รองรับ optimize_streaming_latency (API 400) — ใส่เฉพาะ model ที่รองรับ
+    const q = xiModel === "eleven_v3" ? "" : "?optimize_streaming_latency=2";
     const res = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?optimize_streaming_latency=2`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream${q}`,
       {
         method: "POST",
         headers: { "xi-api-key": xiKey, "Content-Type": "application/json", "Accept": "audio/mpeg" },

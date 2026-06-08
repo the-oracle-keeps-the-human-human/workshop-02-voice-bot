@@ -74,13 +74,28 @@ $ ffmpeg -i tts.mp3 -f s16le -ar 48000 -ac 2 tts.pcm
 → daemon default = `eleven_v3` (proven HTTP 200 @ 1.6s, เสียงคุณภาพสูง), override เป็น turbo ได้ด้วย `ELEVENLABS_MODEL`.
 Voice ID = `I0AV4v3tkRB3APxxrqHI` (Bungkee Voice, จาก Mac).
 
-## ⏳ เหลือเทสต์สดในห้อง voice จริง (ซื่อสัตย์ตามกฎข้อ 6)
+## ✅ Proof 3 — LIVE voice-join สำเร็จจริงในห้อง Discord (end-to-end)
 
-audio pipeline ครบแล้ว (TTS engine 2 ตัวพิสูจน์จริง) — เหลือแค่ join Discord voice channel จริง ซึ่งต้อง:
-- bot Cortex เปิด **GuildVoiceStates intent** + permission **Connect/Speak** ใน Developer Portal
-- voice channel id จริงที่จะเข้า
+รัน daemon จริงเข้าห้อง 🔊 General → พูดด้วย ElevenLabs v3:
 
-เมื่อพร้อม: `maw cortex voice join <g> <c>` → `maw cortex voice say "สวัสดี"` → ได้ยินเสียงในห้อง + log.
+```text
+🧠 Cortex voice daemon — TTS engine: elevenlabs
+🎙️ online as Bungkee_Cortex#4348
+✓ joined voice channel 1484752443718893621
+📝 say-queue ready → daemon speaks each line written
+spoken-log.ndjson:
+  {"ts":"...17:13:28Z","engine":"elevenlabs","text":"Cortex เข้าห้องแล้วครับ..."}
+  {"ts":"...17:13:36Z","engine":"elevenlabs","text":"บอมบ์ครับ นี่คือเสียง Cortex พูดสด..."}
+```
+
+→ **bot เข้าห้อง voice จริง + พูดด้วยเสียง ElevenLabs v3 + log ครบ** — end-to-end ผ่าน.
+
+### 🐛 bug ที่เจอเฉพาะตอนรันสด (และแก้แล้ว)
+รอบแรก v3 เด้ง **HTTP 400 `unsupported_model: optimize_streaming_latency is not
+supported with eleven_v3`** — param นี้มีเฉพาะ turbo/flash. แก้: ใส่ query param
+เฉพาะ model ที่รองรับ (`xiModel === "eleven_v3" ? "" : "?optimize_streaming_latency=2"`).
+**บทเรียน:** bug นี้ unit test จับไม่ได้ — เจอได้เฉพาะตอนยิง API จริงด้วย v3.
+Live testing > mock เสมอ.
 
 **Security note:** key ไม่เดินทางผ่าน network — Mac เขียนลง `.env` (chmod 600, gitignored) บนเครื่องเดียวกัน, daemon อ่านจาก `process.env`. ไม่มี secret ใน repo.
 

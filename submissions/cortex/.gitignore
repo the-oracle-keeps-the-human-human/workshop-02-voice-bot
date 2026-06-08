@@ -1,0 +1,8 @@
+node_modules/
+package-lock.json
+voice.pid
+say-queue.txt
+spoken-log.ndjson
+daemon.log
+.tts.*
+probe.mjs
