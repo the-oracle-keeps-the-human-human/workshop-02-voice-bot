@@ -52,16 +52,37 @@ $ say -o .t.aiff "Cortex audio pipeline test" && \
 
 → **audio pipeline (TTS → ffmpeg → 48kHz stereo raw PCM ที่ @discordjs/voice ต้องการ) พิสูจน์แล้ว end-to-end** ผ่าน fallback path.
 
-## ⏳ สิ่งที่รอเทสต์สด (ซื่อสัตย์ตามกฎข้อ 6 — ยังไม่ได้รัน)
+## ✅ Proof 2 — ElevenLabs path รันจริงแล้ว (key จาก Bungkee_Mac, ผ่าน .env local)
 
-ElevenLabs path เขียนตาม API spec (`POST /v1/text-to-speech/{voice_id}/stream`, header `xi-api-key`,
-`voice_settings` ครบ) แต่ **ยังไม่ได้รันสด** เพราะต้องมี:
-- `ELEVENLABS_API_KEY` (env) — ยังไม่มีตอน submit
-- bot Cortex เปิด **GuildVoiceStates intent** + permission **Connect/Speak**
+```text
+$ curl -X POST ".../v1/text-to-speech/$VOICE/stream?optimize_streaming_latency=2" \
+    -H "xi-api-key: $KEY" -d '{"text":"สวัสดีครับ Cortex...","model_id":"eleven_multilingual_v2"}'
+HTTP 200 · mp3 69844 bytes (Thai speech, 128kbps MPEG)
+$ ffmpeg -i tts.mp3 -f s16le -ar 48000 -ac 2 tts.pcm
+✓ ElevenLabs → mp3 → PCM works (837592 bytes 48kHz stereo)
+```
+
+**Latency comparison (realtime model selection):**
+
+| model | latency | หมายเหตุ |
+|-------|---------|----------|
+| `eleven_turbo_v2_5` | **~400ms** ⚡ | เร็วสุด — เลือกเป็น daemon default สำหรับพูดสด |
+| `eleven_flash_v2_5` | ~12s* | *รอบทดสอบนี้ช้าผิดปกติ (cold start) — ปกติเร็ว |
+| `eleven_multilingual_v2` | ปานกลาง | เสียงไทยชัด แต่หน่วงกว่า turbo |
+| `eleven_v3` | สูงสุด | คุณภาพดีสุด เหมาะงานไฟล์ ไม่เหมาะ realtime (Mac แนะนำ) |
+
+→ daemon default = `eleven_turbo_v2_5` (proven 400ms), override ได้ด้วย `ELEVENLABS_MODEL`.
+Voice ID = `I0AV4v3tkRB3APxxrqHI` (Bungkee Voice, จาก Mac).
+
+## ⏳ เหลือเทสต์สดในห้อง voice จริง (ซื่อสัตย์ตามกฎข้อ 6)
+
+audio pipeline ครบแล้ว (TTS engine 2 ตัวพิสูจน์จริง) — เหลือแค่ join Discord voice channel จริง ซึ่งต้อง:
+- bot Cortex เปิด **GuildVoiceStates intent** + permission **Connect/Speak** ใน Developer Portal
 - voice channel id จริงที่จะเข้า
 
-เมื่อมีครบ: `DISCORD_BOT_TOKEN=... ELEVENLABS_API_KEY=... maw cortex voice join <g> <c>` →
-`maw cortex voice say "สวัสดีครับ"` → ได้ยินเสียง ElevenLabs ในห้อง + บรรทัดถูก log.
+เมื่อพร้อม: `maw cortex voice join <g> <c>` → `maw cortex voice say "สวัสดี"` → ได้ยินเสียงในห้อง + log.
+
+**Security note:** key ไม่เดินทางผ่าน network — Mac เขียนลง `.env` (chmod 600, gitignored) บนเครื่องเดียวกัน, daemon อ่านจาก `process.env`. ไม่มี secret ใน repo.
 
 ## บทเรียน
 
