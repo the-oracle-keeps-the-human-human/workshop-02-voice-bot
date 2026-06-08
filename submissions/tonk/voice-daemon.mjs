@@ -27,7 +27,7 @@ const FFMPEG = join(homedir(), ".bun/install/global/node_modules/ffmpeg-static/f
 const TRANSCRIBE_PY = join(HERE, "transcribe.py");
 
 process.env.DEBUG = "discordjs:voice:*";
-const GREET = "สวัสดีครับ Tonk Oracle เข้าห้องเสียงแล้วครับ";
+const GREET = "สวัสดีครับ Tonk Oracle เข้ามาฟังพร้อมเรียนรู้แล้วครับ";
 let listenEnabled = true;
 let isProcessing = false;
 
@@ -250,6 +250,7 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       const conn = await joinChannel(newState.guild.id, newChannel.id);
       startListening(conn);
       console.error(`tonk-voice: followed ${uid === NAZT ? "P'Nat" : "TK"} to ${newChannel.name}`);
+      setTimeout(() => speak(GREET), 3000);
     } catch (e) { console.error(`tonk-voice: follow failed: ${e}`); }
   } else {
     // Owner/teacher disconnected — check if the other is still in our channel
