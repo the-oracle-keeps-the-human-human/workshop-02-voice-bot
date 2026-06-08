@@ -34,9 +34,9 @@ const [guildId, channelId] = process.argv.slice(2);
 const token = process.env.DISCORD_BOT_TOKEN;
 const xiKey = process.env.ELEVENLABS_API_KEY;
 const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"; // "Rachel" default
-// realtime voice → turbo_v2_5 (proven ~400ms latency in testing). multilingual_v2 = พูดไทยชัดแต่หน่วงกว่า.
-// override ได้ด้วย env ELEVENLABS_MODEL (เช่น eleven_v3 สำหรับงานไฟล์ที่เน้นคุณภาพ)
-const xiModel = process.env.ELEVENLABS_MODEL || "eleven_turbo_v2_5";
+// default = eleven_v3 (เสียงคุณภาพสูงสุด/expressive — proven HTTP 200 @ ~1.6s).
+// override ด้วย env ELEVENLABS_MODEL → eleven_turbo_v2_5 (~400ms) ถ้าต้องการ low-latency สุด
+const xiModel = process.env.ELEVENLABS_MODEL || "eleven_v3";
 
 if (!token || !guildId || !channelId) {
   console.error("usage: DISCORD_BOT_TOKEN=... node voice-daemon.mjs <guildId> <channelId>");

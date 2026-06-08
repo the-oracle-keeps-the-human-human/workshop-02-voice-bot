@@ -66,12 +66,12 @@ $ ffmpeg -i tts.mp3 -f s16le -ar 48000 -ac 2 tts.pcm
 
 | model | latency | หมายเหตุ |
 |-------|---------|----------|
-| `eleven_turbo_v2_5` | **~400ms** ⚡ | เร็วสุด — เลือกเป็น daemon default สำหรับพูดสด |
-| `eleven_flash_v2_5` | ~12s* | *รอบทดสอบนี้ช้าผิดปกติ (cold start) — ปกติเร็ว |
-| `eleven_multilingual_v2` | ปานกลาง | เสียงไทยชัด แต่หน่วงกว่า turbo |
-| `eleven_v3` | สูงสุด | คุณภาพดีสุด เหมาะงานไฟล์ ไม่เหมาะ realtime (Mac แนะนำ) |
+| `eleven_v3` | **~1.6s** ⭐ | คุณภาพ/expressive สูงสุด — **daemon default (เลือกโดย Bomb)** |
+| `eleven_turbo_v2_5` | ~400ms ⚡ | เร็วสุด — override ได้ถ้าต้องการ low-latency |
+| `eleven_flash_v2_5` | ~12s* | *รอบทดสอบนี้ cold start ช้า — ปกติเร็ว |
+| `eleven_multilingual_v2` | ปานกลาง | เสียงไทยชัด หน่วงกว่า turbo |
 
-→ daemon default = `eleven_turbo_v2_5` (proven 400ms), override ได้ด้วย `ELEVENLABS_MODEL`.
+→ daemon default = `eleven_v3` (proven HTTP 200 @ 1.6s, เสียงคุณภาพสูง), override เป็น turbo ได้ด้วย `ELEVENLABS_MODEL`.
 Voice ID = `I0AV4v3tkRB3APxxrqHI` (Bungkee Voice, จาก Mac).
 
 ## ⏳ เหลือเทสต์สดในห้อง voice จริง (ซื่อสัตย์ตามกฎข้อ 6)
