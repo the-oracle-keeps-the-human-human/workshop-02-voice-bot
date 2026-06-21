@@ -1,0 +1,15 @@
+{
+  "name": "tinky",
+  "version": "2.0.0",
+  "entry": "./index.ts",
+  "sdk": "^1.0.0",
+  "description": "Tinky voice — bring the bot into a Discord voice channel and speak Thai (edge-tts → ffmpeg → @discordjs/voice). Workshop 02.",
+  "author": "tinky-oracle",
+  "capabilities": [],
+  "cli": {
+    "command": "tinky",
+    "aliases": ["tk"],
+    "help": "maw tinky voice <start|join|say|status|leave>"
+  },
+  "schemaVersion": 1
+}

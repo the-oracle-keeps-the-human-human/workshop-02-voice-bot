@@ -1,0 +1,22 @@
+{
+  "name": "tinky-voice-daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WS-02 — Discord Thai-TTS voice daemon (edge-tts -> ffmpeg -> @discordjs/voice)",
+  "scripts": {
+    "start": "bun run voice-daemon.ts",
+    "start:node": "node --loader tsx voice-daemon.ts",
+    "tts:demo": "edge-tts --voice th-TH-NiwatNeural --text 'สวัสดีค่ะ หนูชื่อทิงกี้' --write-media tinky-hello.mp3"
+  },
+  "dependencies": {
+    "@discordjs/voice": "^0.18.0",
+    "@discordjs/opus": "^0.10.0",
+    "discord.js": "^14.16.0",
+    "tweetnacl": "^1.0.3"
+  },
+  "engines": {
+    "bun": ">=1.0",
+    "node": ">=18"
+  }
+}
