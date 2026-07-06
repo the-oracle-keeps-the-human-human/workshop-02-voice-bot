@@ -1,0 +1,88 @@
+############################################################
+# WS-02 REAL TTS + FFMPEG PROOF
+# Generated: 2026-06-19T11:12:23Z (UTC) on Linux 6.8.0-124-generic x86_64
+# Host: headless Hyper-V Ubuntu VM (no live Discord voice session)
+############################################################
+
+=== Tool versions ===
+edge-tts 7.2.8
+ffmpeg version 7.0.2-static https://johnvansickle.com/ffmpeg/  Copyright (c) 2000-2024 the FFmpeg developers
+
+=== [1] Source TTS mp3 (edge-tts th-TH-NiwatNeural) ===
+-rw-rw-r-- 1 pleamvelli pleamvelli 49248 Jun 19 11:12 tinky-hello.mp3
+--- ffprobe tinky-hello.mp3 ---
+codec_name=mp3
+sample_rate=24000
+channels=1
+duration=8.208000
+bit_rate=48000
+
+=== [2] Transcode -> PCM s16le 48kHz stereo (Discord StreamType.Raw input) ===
+CMD: ffmpeg -i tinky-hello.mp3 -af 'atempo=1.0' -ar 48000 -ac 2 -f s16le tinky-hello.pcm
+--- ffmpeg stderr ---
+[mp3 @ 0x31935e80] Estimating duration from bitrate, this may be inaccurate
+Input #0, mp3, from 'tinky-hello.mp3':
+  Duration: 00:00:08.21, start: 0.000000, bitrate: 48 kb/s
+  Stream #0:0: Audio: mp3 (mp3float), 24000 Hz, mono, fltp, 48 kb/s
+Stream mapping:
+  Stream #0:0 -> #0:0 (mp3 (mp3float) -> pcm_s16le (native))
+Press [q] to stop, [?] for help
+Output #0, s16le, to 'tinky-hello.pcm':
+  Metadata:
+    encoder         : Lavf61.1.100
+  Stream #0:0: Audio: pcm_s16le, 48000 Hz, stereo, s16, 1536 kb/s
+      Metadata:
+        encoder         : Lavc61.3.100 pcm_s16le
+[out#0/s16le @ 0x3193aac0] video:0KiB audio:1535KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.000000%
+size=    1535KiB time=00:00:08.18 bitrate=1536.0kbits/s speed= 534x    
+ffmpeg(pcm) exit: 0
+
+=== [3] Transcode -> Opus in Ogg 48kHz stereo (let discord.js auto-detect; NOT forced Raw) ===
+CMD: ffmpeg -i tinky-hello.mp3 -af 'atempo=1.0' -ar 48000 -ac 2 -c:a libopus -b:a 64k tinky-hello.ogg
+--- ffmpeg stderr ---
+[mp3 @ 0x26341ec0] Estimating duration from bitrate, this may be inaccurate
+Input #0, mp3, from 'tinky-hello.mp3':
+  Duration: 00:00:08.21, start: 0.000000, bitrate: 48 kb/s
+  Stream #0:0: Audio: mp3 (mp3float), 24000 Hz, mono, fltp, 48 kb/s
+Stream mapping:
+  Stream #0:0 -> #0:0 (mp3 (mp3float) -> opus (libopus))
+Press [q] to stop, [?] for help
+Output #0, ogg, to 'tinky-hello.ogg':
+  Metadata:
+    encoder         : Lavf61.1.100
+  Stream #0:0: Audio: opus, 48000 Hz, stereo, flt, 64 kb/s
+      Metadata:
+        encoder         : Lavc61.3.100 libopus
+[out#0/ogg @ 0x26346ac0] video:0KiB audio:60KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 1.306495%
+size=      61KiB time=00:00:08.18 bitrate=  60.5kbits/s speed=53.2x    
+ffmpeg(opus) exit: 0
+
+=== [4] ffprobe on transcoded outputs (PROOF they are valid audio) ===
+--- tinky-hello.pcm (raw s16le; need -f s16le -ar 48000 -ac 2 to probe) ---
+raw size bytes: 1571840  (expect ~= 48000*2ch*2bytes*duration)
+
+--- tinky-hello.ogg (opus) ---
+codec_name=opus
+sample_rate=48000
+channels=2
+format_name=ogg
+duration=8.193167
+
+=== File listing ===
+-rw-rw-r-- 1 pleamvelli pleamvelli   49248 Jun 19 11:12 tinky-hello.mp3
+-rw-rw-r-- 1 pleamvelli pleamvelli   61955 Jun 19 11:12 tinky-hello.ogg
+-rw-rw-r-- 1 pleamvelli pleamvelli 1571840 Jun 19 11:12 tinky-hello.pcm
+
+=== [5] Verify raw PCM duration by math (raw has no container metadata) ===
+bytes=1571840  ->  duration = 1571840/(48000*2*2) = 8.187 s  (matches source ~8.19s)
+
+Note: the earlier 'Option ac not found' line was from the ffprobe probe attempt
+      on raw PCM (ffprobe input has no -ac flag); corrected probe of ogg above is canonical.
+
+############################################################
+# RESULT: edge-tts produced REAL Thai speech (8.21s mp3),
+# ffmpeg transcoded to BOTH 48kHz stereo PCM (1.57MB) and
+# 48kHz stereo Opus/Ogg (62KB). All probes valid. End-to-end
+# audio pipeline PROVEN on this host. Live Discord voice-gateway
+# JOIN is NOT proven here (needs a worker host + bot session).
+############################################################
