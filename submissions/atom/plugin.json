@@ -1,0 +1,8 @@
+{
+  "name": "atom-voice",
+  "version": "1.0.0",
+  "sdk": "^1.0.0",
+  "description": "Atom Oracle voice command bridge — daemon-first and Codex-first",
+  "surfaces": { "cli": "maw atom voice" },
+  "capabilities": ["voice:control", "http:localhost", "tts:adapter"]
+}
