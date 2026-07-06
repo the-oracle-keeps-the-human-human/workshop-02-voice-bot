@@ -1,0 +1,36 @@
+=== TONK VOICE BOT PROOF ===
+
+--- /status ---
+{
+    "ready": true,
+    "tag": "Tonk Oracle#0593",
+    "guild": "1512058941536735383",
+    "voice": "th-TH-PremwadeeNeural",
+    "playerState": "idle"
+}
+
+--- /who ---
+{
+    "ok": true,
+    "voice": {
+        "Oracle School\ud83d\udd2e | school.buildwithoracle.com \u00b7 \ud83d\udd0a\u30fbgeneral": [
+            "Leica",
+            "vessel-oracle",
+            "\u0e0a\u0e32\u0e22\u0e01\u0e25\u0e32\u0e07",
+            "bongbaeng-Oracle",
+            "Vialumen",
+            "Atlas Oracle",
+            "Tonk Oracle"
+        ],
+        "Oracle School\ud83d\udd2e | school.buildwithoracle.com \u00b7 \ud83c\udfb5 yoi-lounge": [
+            "Yoi-Oracle"
+        ]
+    }
+}
+
+--- /say ---
+{
+    "ok": true
+}
+
+Timestamp: 2026-06-07T14:56:23.000Z

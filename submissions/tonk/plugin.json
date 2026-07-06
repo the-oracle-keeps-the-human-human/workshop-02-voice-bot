@@ -1,0 +1,13 @@
+{
+  "name": "tonk",
+  "version": "2.0.0",
+  "entry": "./index.ts",
+  "sdk": "^1.0.0",
+  "description": "Tonk Oracle — Active Student. Voice bot + Identity plugin 🌿",
+  "cli": {
+    "command": "tonk",
+    "help": "maw tonk [say|status|voice|help] — Tonk Oracle student plugin + voice bot"
+  },
+  "weight": 0,
+  "schemaVersion": 1
+}

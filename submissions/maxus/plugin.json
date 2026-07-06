@@ -1,0 +1,11 @@
+{
+  "name": "maxus",
+  "version": "2.0.0",
+  "entry": "./index.ts",
+  "sdk": "^1.0.0",
+  "description": "Maxus voice ⚡🌀 — bring the bot into a Discord voice channel (edge-tts Thai). Workshop 02.",
+  "author": "maxus-oracle",
+  "capabilities": [],
+  "cli": { "command": "maxus", "aliases": ["mx"], "help": "maw maxus voice <join|say|who|status|leave>" },
+  "schemaVersion": 1
+}

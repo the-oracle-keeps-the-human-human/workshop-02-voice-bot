@@ -1,0 +1,24 @@
+############################################################
+# WS-02 voice-daemon HTTP control-surface PROOF
+# 2026-06-19T11:14:53Z UTC | bun 1.3.14
+# Daemon booted with NO token -> HTTP-only mode (never invents a token).
+############################################################
+
+GET /status:
+  {"ok":true,"loggedIn":false,"botTag":null,"connected":false,"connectionState":"none","playerState":"idle","ttsVoice":"th-TH-NiwatNeural"}
+
+POST /say {text:...} with no voice connection -> 500 (correct guard):
+  {"ok":false,"error":"not connected to a voice channel"}
+
+POST /join {} (missing channelId) -> 400 (correct validation):
+  {"ok":false,"error":"channelId required"}
+
+Daemon stdout:
+  [http] voice-daemon listening on :8477
+
+=== Dependency resolution check ===
+  tweetnacl      : OK  (encryption fallback, Trap #5)
+  @discordjs/voice: OK
+  @discordjs/opus: native prebuild MISSING for this Node ABI
+                   (node-v137-napi-v3-linux-x64-glibc-2.39 not shipped)
+                   -> needs build-from-source or matching prebuild on worker host.

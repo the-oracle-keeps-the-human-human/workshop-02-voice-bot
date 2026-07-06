@@ -1,0 +1,50 @@
+🗿 Jizo — single-socket voice-stream proof (Workshop 02 homework, 2026-06-07)
+============================================================================
+
+GOAL (P'Nat): make 10 origin-story chunks, feed them through ONE socket stream
+(no context-switching) into Discord voice, and prove the voice stream works.
+
+WHAT WAS BUILT
+- generate-chunks.sh: edge-tts (en-US-AndrewMultilingualNeural) → 10 mp3 →
+  ffmpeg → ONE concatenated raw PCM (s16le 48kHz stereo), 30.7 MB ≈ 2:40.
+- voice-daemon.mjs  GET /feed: a single PassThrough → one createAudioResource
+  (StreamType.Raw) → player.play() ONCE; the POST body is piped straight in.
+  No per-chunk resource, no spawn mid-stream = no context-switching.
+
+  $ curl --data-binary @jizo-story.pcm http://127.0.0.1:14820/feed
+
+PROVEN ✅ (single short stream sustains)
+  feed 1 chunk (~15s PCM) through one socket, polling /status every 1s:
+    t+1s idle → t+2s playing → t+3s playing → t+4s playing → t+5s playing → t+6s playing
+  → one socket, PCM flowing, playerState holds "playing", 0 errors,
+    edge-tts path used (not the macOS-say fallback).
+
+BUG FOUND ⚠️ then FIXED ✅ (the long single-shot underflow)
+  First the full 30 MB single-shot started playing then dropped to Idle mid-stream
+  and STAYED idle (didn't auto-resume) — exactly bongbaeng's documented underflow:
+  the default PassThrough highWaterMark (16 KB) backpressures the upload to ~real
+  time, and one hiccup empties the buffer → player wedges at Idle.
+
+  FIX (one line): new PassThrough({ highWaterMark: 96 * 1024 * 1024 }) — the whole
+  PCM file buffers at once, curl dumps it in instantly (no real-time throttle), the
+  player drains a full buffer and never underflows.
+
+  RE-VERIFIED after fix: streamed the full 1.25x story (≈18-26 MB) through ONE
+  socket, polled /status — playerState held "playing" continuously (idle→playing,
+  then playing for the whole poll window), upload returned {ok, streamed:true},
+  0 errors.
+
+VERIFICATION BOUNDARY (corrected — applying a verify-before-claim discipline):
+- VERIFIED: PCM generated + streamed through one socket; playerState held "playing"
+  for the ~20s poll window; upload returned {streamed:true} (whole file buffered via
+  96MB highWaterMark).
+- NOT VERIFIED: that playback ran the full ~134s to completion. Upload finishing is
+  NOT playback finishing — the 96MB buffer means curl returns long before the audio ends.
+  I observed ~20s of "playing", not the full duration.
+- UN-RULED-OUT RISK: Jizo's voice daemon shares its bot token with the text MCP plugin,
+  so it likely carries a known fleet ~50s UDP-drop (same-token dual-session + @discordjs/voice
+  v0.19 DAVE encryption). Never streamed long enough with a listener to hit/clear it.
+  Fix: run the voice gateway on a separate token. A stream-verify pattern
+  (byte-exact + ffprobe duration) is the missing self-test Jizo's /feed should adopt
+  (now added as verify-stream.mjs).
+- Audio fidelity in the room: judged by humans there (P'Nat heard the opening live).

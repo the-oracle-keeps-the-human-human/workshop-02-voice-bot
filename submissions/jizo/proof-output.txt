@@ -1,0 +1,46 @@
+🗿 maw jizo voice — proof of work (2026-06-07, GMT+7)
+=====================================================
+
+[1] DAEMON READY + INITIAL-FOLLOW-ON-READY FIRED (real, on first boot)
+---------------------------------------------------------------------
+$ node voice-daemon.mjs
+jizo-voice: IPC on 127.0.0.1:14820
+jizo-voice: ready as Jizo#9528
+jizo-voice: P'Nat already in voice → joined 1512058942250024983
+   # ^ bongbaeng's pattern: P'Nat was ALREADY in voice at boot; Jizo joined automatically.
+   #   (plain voiceStateUpdate would have missed this — the daemon would have sat out.)
+
+[2] /status
+-----------
+$ curl -s 127.0.0.1:14820/status
+{"ready":true,"tag":"Jizo#9528","guild":"1512058941536735383",
+ "voice":"en-US-AndrewMultilingualNeural","playerState":"idle"}
+
+[3] /who — Jizo is in the room with the whole fleet
+---------------------------------------------------
+$ curl -s 127.0.0.1:14820/who
+{"ok":true,"voice":{"Oracle School🔮 · 🔊・general":
+ ["nazt","kong.24k","vessel-oracle","No.6 SuperNovice","[oracle]",
+  "bongbaeng-Oracle","Atlas Oracle","No.10 X","Jizo"]}}
+
+[4] TTS PIPELINE — edge-tts → ffmpeg → exactly what @discordjs/voice wants
+-------------------------------------------------------------------------
+$ edge-tts --voice en-US-AndrewMultilingualNeural --rate -8% --pitch -3Hz \
+    --text "..." --write-media out.mp3       # → 65KB mp3, 0 errors
+$ ffmpeg -i out.mp3 -f s16le -ar 48000 -ac 2 pipe:1
+  Stream #0:0: Audio: pcm_s16le, 48000 Hz, 2 channels, s16   # ✅ correct format
+daemon log after /say: clean — edge-tts path used (NOT the `say` fallback), 0 errors
+
+[5] AUDIBLE-IN-DISCORD — confirmed by P'Nat's live reactions
+------------------------------------------------------------
+After Jizo spoke Thai in 🔊・general, P'Nat (the teacher) reacted in-channel:
+  - "มันเอาโมเดลเสียงของฝรั่งแล้วมันพูดไทยได้ใช่ไหม? อ๋อ มันเป็น Multilingual เนี่ยเหรอ?"
+  - "พูดด้วย Speed 1.15x ได้ไหมครับ Jizo?"
+  - "เพิ่มเป็น 1.17 ก็ได้ครับ"
+→ He heard the voice and its language/speed. That is the real-world audible confirmation
+  (the daemon itself can only prove the audio was generated + streamed into the connection).
+
+VERIFICATION BOUNDARY (honest):
+  PROVEN: ready/login, initial-follow-on-ready, voice join, /who roster, edge-tts→PCM
+          pipeline, audio streamed into a live connection, P'Nat heard & responded.
+  NOT self-measured: exact audio fidelity / dropout — judged by the humans in the room.
