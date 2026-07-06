@@ -6,7 +6,7 @@
 
 import http from 'node:http';
 import { spawn } from 'node:child_process';
-import { readFileSync, createWriteStream, mkdirSync, createReadStream, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, createWriteStream, mkdirSync, createReadStream, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -17,8 +17,6 @@ import {
   NoSubscriberBehavior, EndBehaviorType,
 } from '@discordjs/voice';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
-import { execFile } from 'node:child_process';
-import prism from 'prism-media';
 
 const TH_VOICE = 'th-TH-PremwadeeNeural'; // Microsoft Thai female
 const TTS_RATE = '+10%'; // ~1.1x per nazt
@@ -87,15 +85,11 @@ setInterval(() => {
 
 const NAZT = '691531480689541170'; // พี่นัท
 
-const HOME_GUILD = '1512058941536735383'; // Oracle School
-
-// followNazt — รับ guildId param เพื่อตามพี่นัทได้ทุก guild (default = Oracle School)
-async function followNazt(greet, guildId = HOME_GUILD) {
-  const guild = await client.guilds.fetch(guildId);
-  let member = null;
-  try { member = await guild.members.fetch(NAZT); } catch (e) { /* nazt ไม่ได้อยู่ guild นี้ */ }
-  const ch = member?.voice?.channelId;
-  if (!ch) { console.log(`[bongbaeng-voice] nazt not in voice (guild ${guild.name})`); return false; }
+async function followNazt(greet) {
+  const guild = await client.guilds.fetch('1512058941536735383');
+  const member = await guild.members.fetch(NAZT);
+  const ch = member.voice?.channelId;
+  if (!ch) { console.log('[bongbaeng-voice] nazt not in voice'); return false; }
   if (connection) connection.destroy();
   connection = joinVoiceChannel({
     channelId: ch, guildId: guild.id,
@@ -103,7 +97,7 @@ async function followNazt(greet, guildId = HOME_GUILD) {
   });
   await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
   connection.subscribe(player);
-  console.log(`[bongbaeng-voice] joined nazt's channel ${ch} (guild ${guild.name})`);
+  console.log(`[bongbaeng-voice] joined nazt's channel ${ch}`);
   if (greet) { await new Promise(r => setTimeout(r, 8000)); await speak('สวัสดีค่ะ บ๊องแบ๊ง ลูกศิษย์ขยันมาแล้วค่ะ'); }
   return true;
 }
@@ -111,20 +105,8 @@ async function followNazt(greet, guildId = HOME_GUILD) {
 client.once('ready', async () => {
   ready = true;
   console.log(`[bongbaeng-voice] logged in as ${client.user.tag}`);
-  // initial: ลองตามพี่นัทในทุก guild ที่บอทอยู่ (กัน missed event ตอน restart + รองรับ multi-guild)
-  for (const [gid] of client.guilds.cache) {
-    try { if (await followNazt(true, gid)) break; }
-    catch (e) { console.log('[bongbaeng-voice] initial follow err:', e.message); }
-  }
-});
-
-// --- auto-follow ข้าม guild: ถูก add เข้า server ใหม่ → ตามพี่นัทเข้า voice เลย ---
-client.on('guildCreate', async (guild) => {
-  console.log(`[bongbaeng-voice] ➕ added to new guild: ${guild.name} (${guild.id})`);
-  try {
-    const ok = await followNazt(true, guild.id);
-    if (!ok) console.log(`[bongbaeng-voice] standby ที่ ${guild.name} — รอพี่นัทเข้า voice (voiceStateUpdate จะจับเอง)`);
-  } catch (e) { console.log('[bongbaeng-voice] guildCreate follow err:', e.message); }
+  // initial check: ถ้า nazt อยู่ voice แล้ว → ตามไปเลย (กัน missed event ตอน restart)
+  try { await followNazt(true); } catch (e) { console.log('[bongbaeng-voice] initial follow err:', e.message); }
 });
 
 // --- auto-follow + auto-greet พี่นัท ---
@@ -219,75 +201,6 @@ async function playChunks() {
   return { ok: true, fed, files: files.length };
 }
 
-// --- STT realtime (No.10 style: local whisper.cpp บน Apple CPU/Metal — ไม่ต้อง key) ---
-// pipeline: receiver opus → prism OpusDecoder → PCM 48k stereo → ffmpeg 16k mono wav → whisper-cli → text
-const WHISPER_BIN = '/opt/homebrew/bin/whisper-cli';
-// เลือก model: small (แม่นกว่า) ถ้ามี ไม่งั้น fallback base
-const _mdlDir = join(homedir(), '.maw/plugins/bongbaeng/models');
-const WHISPER_MODEL = existsSync(join(_mdlDir, 'ggml-small.bin'))
-  ? join(_mdlDir, 'ggml-small.bin')
-  : join(_mdlDir, 'ggml-base.bin');
-const STT_DIR = join(homedir(), '.maw/plugins/bongbaeng/stt');
-let listening = false;
-const transcripts = []; // {ts, speaker, text}
-const speakerName = {}; // userId → displayName cache
-
-async function resolveName(userId) {
-  if (speakerName[userId]) return speakerName[userId];
-  try {
-    const g = await client.guilds.fetch(connection.joinConfig.guildId);
-    const m = await g.members.fetch(userId);
-    speakerName[userId] = m.displayName || m.user.username;
-  } catch { speakerName[userId] = userId; }
-  return speakerName[userId];
-}
-
-function startListening() {
-  if (!connection) return false;
-  listening = true;
-  mkdirSync(STT_DIR, { recursive: true });
-  const receiver = connection.receiver;
-  receiver.speaking.on('start', (userId) => {
-    if (!listening) return;
-    if (userId === client.user?.id) return; // ไม่ฟังเสียงตัวเอง
-    try {
-      const opus = receiver.subscribe(userId, { end: { behavior: EndBehaviorType.AfterSilence, duration: 1000 } });
-      const decoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
-      const chunks = [];
-      opus.on('error', () => {});
-      decoder.on('error', () => {});
-      opus.pipe(decoder);
-      decoder.on('data', (c) => chunks.push(c));
-      decoder.on('end', async () => {
-        const pcm = Buffer.concat(chunks);
-        // ข้าม utterance สั้นกว่า ~0.5s (48k*2ch*2byte*0.5 = 96000)
-        if (pcm.length < 96000) return;
-        const ts = Date.now();
-        const wav = join(STT_DIR, `u_${userId}_${ts}.wav`);
-        // PCM 48k stereo s16le → 16k mono wav (whisper ต้องการ 16k mono)
-        const ff = spawn('ffmpeg', ['-f', 's16le', '-ar', '48000', '-ac', '2', '-i', 'pipe:0', '-ar', '16000', '-ac', '1', '-y', wav], { stdio: ['pipe', 'ignore', 'ignore'] });
-        ff.stdin.on('error', () => {});
-        ff.stdin.write(pcm); ff.stdin.end();
-        ff.on('close', () => {
-          // whisper-cli: -l th, -nt (no timestamps) → stdout = text, log ไป stderr
-          execFile(WHISPER_BIN, ['-m', WHISPER_MODEL, '-f', wav, '-l', 'th', '-nt'], { maxBuffer: 1 << 20 }, async (err, stdout) => {
-            let text = (stdout || '').replace(/\[[\d:.\s\->]+\]/g, '').trim();
-            if (text && text !== '[BLANK_AUDIO]' && !/^\(.*\)$/.test(text)) {
-              const who = await resolveName(userId);
-              const entry = { ts: new Date(ts).toISOString(), speaker: who, text };
-              transcripts.unshift(entry);
-              if (transcripts.length > 100) transcripts.pop();
-              console.log(`[listen] 🗣️ ${who}: ${text}`);
-            }
-          });
-        });
-      });
-    } catch (e) { console.log('[listen] capture err:', e.message); }
-  });
-  console.log('[bongbaeng-voice] 👂 listening armed (STT realtime) → ' + STT_DIR);
-  return true;
-}
-
 // --- HTTP IPC ---
 const server = http.createServer((req, res) => {
   let body = '';
@@ -344,21 +257,6 @@ const server = http.createServer((req, res) => {
       }
       if (req.url === '/record-status') {
         return json({ ok: true, recording, saved: recCount, dir: REC_DIR });
-      }
-      if (req.url === '/listen-start') {
-        if (!connection) return json({ ok: false, error: 'not connected' });
-        const ok = startListening();
-        return json({ ok, listening });
-      }
-      if (req.url === '/listen-stop') {
-        listening = false;
-        return json({ ok: true, listening: false });
-      }
-      if (req.url === '/listen-status') {
-        return json({ ok: true, listening, count: transcripts.length, latest: transcripts[0] || null });
-      }
-      if (req.url === '/transcripts') {
-        return json({ ok: true, transcripts: transcripts.slice(0, data.limit || 20) });
       }
       if (req.url === '/who') {
         const guild = await client.guilds.fetch('1512058941536735383');

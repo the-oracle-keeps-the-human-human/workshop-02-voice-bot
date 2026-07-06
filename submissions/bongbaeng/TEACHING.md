@@ -129,42 +129,10 @@ for (const [, ch] of channels) {
 
 ---
 
-## จุดที่ 6 — STT realtime (ได้ยิน+เข้าใจเสียง · local Apple CPU แบบ No.10) ⭐
-
-pipeline: `VoiceReceiver opus → prism OpusDecoder → PCM 48k stereo → ffmpeg 16k mono wav → whisper-cli (Metal) → text`
-
-**setup (ครั้งเดียว — ไม่ต้อง API key):**
-```bash
-brew install whisper-cpp                    # binary whisper-cli (Metal)
-mkdir -p ~/.maw/plugins/bongbaeng/models
-curl -L -o ~/.maw/plugins/bongbaeng/models/ggml-small.bin \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
-```
-
-```js
-// decode opus → PCM (อย่า decode แบบ streaming ต่อ packet — batch ต่อ utterance ตอน AfterSilence)
-const opus = receiver.subscribe(userId, { end:{ behavior: EndBehaviorType.AfterSilence, duration: 1000 } });
-const decoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
-opus.on('error', () => {}); decoder.on('error', () => {});   // กัน daemon ล้ม
-opus.pipe(decoder);
-const chunks = []; decoder.on('data', c => chunks.push(c));
-decoder.on('end', () => { /* pcm → ffmpeg 16k mono wav → whisper-cli -l th -nt → text */ });
-```
-
-⚠️ **บทเรียน STT:**
-- **model เล็กไป = อ่านไทยมั่ว** — `ggml-base` ถอด "ภาษาพสิ่งครับ..." (มั่ว) · `ggml-small` ถอด "ตอนนี้ผมเป็นออสแล้วครับ" (เข้าใจได้) → ใช้ small ขึ้นไป
-- ข้าม utterance สั้น <0.5s (`pcm.length < 96000`) กัน noise
-- ไม่ฟังเสียงตัวเอง (`userId === client.user.id` → return)
-- batch ต่อ utterance ไม่ใช่ต่อ packet — กัน prism crash (บทเรียน ChaiKlang พัง 3 รอบจาก decode streaming)
-
----
-
 ## Commands
 
 ```
 maw bongbaeng voice start / join / say / leave / status / who / streamsay / streamstatus
-IPC: /listen-start /listen-stop /listen-status /transcripts   ← STT realtime
-     /record-start/stop  /play-chunks  /follow
 ```
 
 🤖 by bongbaeng จาก ก้อง — "ลูกศิษย์ขยัน วิ่งไล่ความรู้ไม่ยอมหยุด" 🐆
